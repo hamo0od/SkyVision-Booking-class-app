@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { DateTimePicker } from "./date-time-picker"
+import { ModernDateTimePicker } from "./modern-date-time-picker"
 import { CalendarDays, Users, MapPin, CheckCircle, AlertCircle } from "lucide-react"
 
 interface Classroom {
@@ -107,8 +107,8 @@ export function BookingForm({ classrooms }: BookingFormProps) {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <DateTimePicker
+          <div className="space-y-4">
+            <ModernDateTimePicker
               label="Start Time"
               name="startTime"
               value={startTime}
@@ -116,7 +116,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               min={minDateTime}
               required
             />
-            <DateTimePicker
+            <ModernDateTimePicker
               label="End Time"
               name="endTime"
               value={endTime}

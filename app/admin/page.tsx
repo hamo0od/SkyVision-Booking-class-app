@@ -6,6 +6,7 @@ import { AdminBookingList } from "@/components/admin-booking-list"
 import { LogoutButton } from "@/components/logout-button"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { Users } from "lucide-react"
 
 export default async function AdminPanel() {
   const session = await getServerSession(authOptions)
@@ -55,6 +56,12 @@ export default async function AdminPanel() {
               <Link href="/dashboard">
                 <Button variant="outline" className="border-purple-200 text-purple-600 hover:bg-purple-50">
                   Back to Dashboard
+                </Button>
+              </Link>
+              <Link href="/admin/users">
+                <Button variant="outline" className="border-purple-200 text-purple-600 hover:bg-purple-50">
+                  <Users className="h-4 w-4 mr-2" />
+                  Manage Users
                 </Button>
               </Link>
               <LogoutButton />
