@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { redirect } from "next/navigation"
 import { BookingForm } from "@/components/booking-form"
 import { BookingList } from "@/components/booking-list"
+import { BookingTimeline } from "@/components/booking-timeline"
 import { Button } from "@/components/ui/button"
 import { LogoutButton } from "@/components/logout-button"
 import Link from "next/link"
@@ -50,6 +51,11 @@ export default async function Dashboard() {
                   </Button>
                 </Link>
               )}
+              <Link href="/timeline">
+                <Button variant="outline" className="border-green-200 text-green-600 hover:bg-green-50">
+                  View Timeline
+                </Button>
+              </Link>
               <LogoutButton />
             </div>
           </div>
@@ -58,6 +64,13 @@ export default async function Dashboard() {
 
       <main className="max-w-7xl mx-auto py-8 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
+          {/* Timeline Section */}
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold mb-6 text-gray-800">Booking Timeline</h2>
+            <BookingTimeline />
+          </div>
+
+          {/* Booking Form and User Bookings */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div>
               <h2 className="text-2xl font-bold mb-6 text-gray-800">Book a Classroom</h2>
