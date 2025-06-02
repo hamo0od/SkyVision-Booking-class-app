@@ -54,12 +54,28 @@ export function ModernDateTimePicker({ label, name, value, onChange, min, requir
     return days
   }
 
+  // Fixed: Use local date formatting to avoid timezone issues
   const formatDate = (date: Date) => {
-    return date.toISOString().split("T")[0]
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, "0")
+    const day = String(date.getDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
   }
 
+  // Fixed: Compare dates properly in local timezone
   const isDateDisabled = (date: Date) => {
-    return date < minDate
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const compareDate = new Date(date)
+    compareDate.setHours(0, 0, 0, 0)
+
+    if (min) {
+      const minDateOnly = new Date(min)
+      minDateOnly.setHours(0, 0, 0, 0)
+      return compareDate < minDateOnly
+    }
+
+    return compareDate < today
   }
 
   const handleDateSelect = (date: Date) => {
@@ -104,6 +120,21 @@ export function ModernDateTimePicker({ label, name, value, onChange, min, requir
   ]
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
+  // Fixed: Display selected date properly in local timezone
+  const displaySelectedDate = () => {
+    if (!selectedDate) return "Pick a date"
+
+    const [year, month, day] = selectedDate.split("-").map(Number)
+    const date = new Date(year, month - 1, day)
+
+    return date.toLocaleDateString("en-US", {
+      weekday: "short",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    })
+  }
+
   return (
     <div className="space-y-3">
       <Label htmlFor={name} className="text-sm font-medium text-gray-700">
@@ -127,16 +158,7 @@ export function ModernDateTimePicker({ label, name, value, onChange, min, requir
                   className="w-full justify-start text-left font-normal"
                   onClick={() => setShowCalendar(!showCalendar)}
                 >
-                  {selectedDate ? (
-                    new Date(selectedDate).toLocaleDateString("en-US", {
-                      weekday: "short",
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric",
-                    })
-                  ) : (
-                    <span className="text-gray-500">Pick a date</span>
-                  )}
+                  {selectedDate ? displaySelectedDate() : <span className="text-gray-500">Pick a date</span>}
                   <Calendar className="ml-auto h-4 w-4 opacity-50" />
                 </Button>
 
