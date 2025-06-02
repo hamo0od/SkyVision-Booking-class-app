@@ -142,8 +142,9 @@ export function ModernDateTimePicker({ label, name, value, onChange, min, requir
       </Label>
 
       <Card className="border-2 border-gray-200 hover:border-blue-300 transition-colors">
-        <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <CardContent className="p-3 sm:p-4">
+          {/* Mobile: Stack vertically, Desktop: Side by side */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Date Picker */}
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm font-medium text-gray-600">
@@ -155,7 +156,7 @@ export function ModernDateTimePicker({ label, name, value, onChange, min, requir
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full justify-start text-left font-normal"
+                  className="w-full justify-start text-left font-normal text-sm"
                   onClick={() => setShowCalendar(!showCalendar)}
                 >
                   {selectedDate ? displaySelectedDate() : <span className="text-gray-500">Pick a date</span>}
@@ -163,13 +164,13 @@ export function ModernDateTimePicker({ label, name, value, onChange, min, requir
                 </Button>
 
                 {showCalendar && (
-                  <div className="absolute top-full left-0 z-50 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4">
+                  <div className="absolute top-full left-0 z-50 mt-2 w-full sm:w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-3 sm:p-4">
                     {/* Calendar Header */}
                     <div className="flex items-center justify-between mb-4">
                       <Button type="button" variant="ghost" size="sm" onClick={() => navigateMonth("prev")}>
                         <ChevronLeft className="h-4 w-4" />
                       </Button>
-                      <h3 className="font-semibold">
+                      <h3 className="font-semibold text-sm sm:text-base">
                         {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
                       </h3>
                       <Button type="button" variant="ghost" size="sm" onClick={() => navigateMonth("next")}>
@@ -180,7 +181,7 @@ export function ModernDateTimePicker({ label, name, value, onChange, min, requir
                     {/* Day Names */}
                     <div className="grid grid-cols-7 gap-1 mb-2">
                       {dayNames.map((day) => (
-                        <div key={day} className="text-center text-xs font-medium text-gray-500 p-2">
+                        <div key={day} className="text-center text-xs font-medium text-gray-500 p-1 sm:p-2">
                           {day}
                         </div>
                       ))}
@@ -195,7 +196,7 @@ export function ModernDateTimePicker({ label, name, value, onChange, min, requir
                               type="button"
                               variant={selectedDate === formatDate(date) ? "default" : "ghost"}
                               size="sm"
-                              className={`w-full h-full text-sm ${
+                              className={`w-full h-full text-xs sm:text-sm ${
                                 isDateDisabled(date) ? "opacity-50 cursor-not-allowed" : "hover:bg-blue-50"
                               } ${selectedDate === formatDate(date) ? "bg-blue-600 text-white" : ""}`}
                               onClick={() => !isDateDisabled(date) && handleDateSelect(date)}
@@ -225,7 +226,7 @@ export function ModernDateTimePicker({ label, name, value, onChange, min, requir
                     key={time}
                     type="button"
                     variant={selectedTime === time ? "default" : "ghost"}
-                    className={`w-full justify-start text-left font-normal rounded-none border-0 ${
+                    className={`w-full justify-start text-left font-normal rounded-none border-0 text-sm ${
                       selectedTime === time ? "bg-blue-600 text-white" : "hover:bg-blue-50"
                     }`}
                     onClick={() => setSelectedTime(time)}

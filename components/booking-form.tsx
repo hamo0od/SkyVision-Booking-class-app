@@ -58,28 +58,32 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   const minDateTime = new Date().toISOString().slice(0, 16)
 
   return (
-    <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50">
+    <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50 w-full">
       <CardHeader className="pb-4">
-        <CardTitle className="flex items-center gap-2 text-xl">
+        <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
           <CalendarDays className="h-5 w-5 text-blue-600" />
           New Booking Request
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4 sm:space-y-6">
         {message && (
           <div
-            className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${
+            className={`p-3 rounded-lg flex items-start gap-2 text-sm ${
               message.type === "success"
                 ? "bg-green-50 text-green-800 border border-green-200"
                 : "bg-red-50 text-red-800 border border-red-200"
             }`}
           >
-            {message.type === "success" ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
-            <span className="text-sm">{message.text}</span>
+            {message.type === "success" ? (
+              <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            ) : (
+              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            )}
+            <span>{message.text}</span>
           </div>
         )}
 
-        <form action={handleSubmit} className="space-y-6">
+        <form action={handleSubmit} className="space-y-4 sm:space-y-6">
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-700">
               <MapPin className="inline h-4 w-4 mr-1" />
@@ -92,11 +96,11 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               <SelectContent>
                 {classrooms.map((classroom) => (
                   <SelectItem key={classroom.id} value={classroom.id}>
-                    <div className="flex items-center justify-between w-full">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full">
                       <span className="font-medium">{classroom.name}</span>
-                      <span className="text-sm text-gray-500 ml-2">
+                      <span className="text-sm text-gray-500 sm:ml-2">
                         <Users className="inline h-3 w-3 mr-1" />
-                        {classroom.capacity}
+                        {classroom.capacity} people
                       </span>
                     </div>
                   </SelectItem>
@@ -104,7 +108,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               </SelectContent>
             </Select>
             {selectedClassroom && (
-              <div className="text-xs text-gray-600 mt-1">
+              <div className="text-xs text-gray-600 mt-1 p-2 bg-blue-50 rounded">
                 {classrooms.find((c) => c.id === selectedClassroom)?.description}
               </div>
             )}
@@ -135,22 +139,26 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               name="purpose"
               placeholder="Describe the purpose of your booking (e.g., Team meeting, Training session, Workshop...)"
               required
-              className="min-h-[100px] resize-none"
+              className="min-h-[80px] sm:min-h-[100px] resize-none text-sm"
             />
           </div>
 
           <Button
             type="submit"
-            className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium py-3 rounded-lg transition-all duration-200 transform hover:scale-[1.02]"
+            className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium py-3 rounded-lg transition-all duration-200 transform hover:scale-[1.02] text-sm sm:text-base"
             disabled={isSubmitting}
           >
             {isSubmitting ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center gap-2">
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Submitting Request...
+                <span className="hidden sm:inline">Submitting Request...</span>
+                <span className="sm:hidden">Submitting...</span>
               </div>
             ) : (
-              "Submit Booking Request"
+              <>
+                <span className="hidden sm:inline">Submit Booking Request</span>
+                <span className="sm:hidden">Submit Request</span>
+              </>
             )}
           </Button>
         </form>
