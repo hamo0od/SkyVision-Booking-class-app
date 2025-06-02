@@ -1,7 +1,5 @@
 import type { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { prisma } from "./db"
-import bcrypt from "bcryptjs"
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -16,17 +14,25 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
-        })
+        // For demo purposes - in production, fetch from database with hashed passwords
+        const demoUsers = [
+          {
+            id: "admin-1",
+            email: "admin@example.com",
+            name: "Admin User",
+            role: "ADMIN",
+          },
+          {
+            id: "user-1",
+            email: "user@example.com",
+            name: "Regular User",
+            role: "USER",
+          },
+        ]
 
-        if (!user) {
-          return null
-        }
+        const user = demoUsers.find((u) => u.email === credentials.email)
 
-        const isPasswordValid = await bcrypt.compare(credentials.password, credentials.password)
-
-        if (!isPasswordValid) {
+        if (!user || credentials.password !== "password") {
           return null
         }
 
