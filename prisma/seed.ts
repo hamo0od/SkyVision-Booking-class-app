@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client"
+import bcrypt from "bcryptjs"
 
 const prisma = new PrismaClient()
 
@@ -24,12 +25,17 @@ async function main() {
     },
   })
 
-  // Create admin user (password will be handled in auth.ts)
+  // Hash passwords
+  const hashedPassword = await bcrypt.hash("password", 12)
+
+  // Create admin user
   await prisma.user.upsert({
     where: { email: "admin@example.com" },
     update: {},
     create: {
       email: "admin@example.com",
+      username: "admin",
+      password: hashedPassword,
       name: "Admin User",
       role: "ADMIN",
     },
@@ -41,6 +47,8 @@ async function main() {
     update: {},
     create: {
       email: "user@example.com",
+      username: "user",
+      password: hashedPassword,
       name: "Regular User",
       role: "USER",
     },
@@ -48,8 +56,9 @@ async function main() {
 
   console.log("Database seeded successfully!")
   console.log("Demo accounts created:")
-  console.log("Admin: admin@example.com / password")
-  console.log("User: user@example.com / password")
+  console.log("Admin: admin / password")
+  console.log("User: user / password")
+  console.log("Classrooms created: Room A (30 capacity), Room B (20 capacity)")
 }
 
 main()
