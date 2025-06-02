@@ -1,5 +1,6 @@
 import type { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
+import { prisma } from "./db"
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -14,25 +15,17 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
-        // For demo purposes - in production, fetch from database with hashed passwords
-        const demoUsers = [
-          {
-            id: "admin-1",
-            email: "admin@example.com",
-            name: "Admin User",
-            role: "ADMIN",
-          },
-          {
-            id: "user-1",
-            email: "user@example.com",
-            name: "Regular User",
-            role: "USER",
-          },
-        ]
+        // Find user in database
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email },
+        })
 
-        const user = demoUsers.find((u) => u.email === credentials.email)
+        if (!user) {
+          return null
+        }
 
-        if (!user || credentials.password !== "password") {
+        // For demo purposes - check if password is "password"
+        if (credentials.password !== "password") {
           return null
         }
 
