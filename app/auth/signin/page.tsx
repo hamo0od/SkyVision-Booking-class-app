@@ -8,20 +8,23 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { AlertCircle } from "lucide-react"
 
 export default function SignIn() {
-  const [email, setEmail] = useState("")
+  const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState("")
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setError("")
 
     try {
       const result = await signIn("credentials", {
-        email,
+        username,
         password,
         redirect: false,
       })
@@ -29,50 +32,70 @@ export default function SignIn() {
       if (result?.ok) {
         router.push("/dashboard")
       } else {
-        alert("Invalid credentials")
+        setError("Invalid username or password")
       }
     } catch (error) {
-      alert("Sign in failed")
+      setError("Sign in failed. Please try again.")
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Sign In</CardTitle>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+      <Card className="w-full max-w-md shadow-xl border-0">
+        <CardHeader className="pb-4 text-center">
+          <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+            Sign In
+          </CardTitle>
           <CardDescription>Access the classroom booking system</CardDescription>
         </CardHeader>
         <CardContent>
+          {error && (
+            <div className="mb-4 p-3 rounded-lg flex items-center gap-2 bg-red-50 text-red-800 border border-red-200">
+              <AlertCircle className="h-4 w-4" />
+              <span className="text-sm">{error}</span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Username or Email</label>
               <Input
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="text"
+                placeholder="Enter your username or email"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 required
+                className="w-full"
               />
             </div>
-            <div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Password</label>
               <Input
                 type="password"
-                placeholder="Password"
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                className="w-full"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "Signing in..." : "Sign In"}
+            <Button type="submit" className="w-full bg-gradient-to-r from-blue-600 to-indigo-600" disabled={isLoading}>
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Signing in...
+                </div>
+              ) : (
+                "Sign In"
+              )}
             </Button>
           </form>
           <div className="mt-4 text-sm text-gray-600">
             <p>Demo accounts:</p>
-            <p>User: user@example.com / password</p>
-            <p>Admin: admin@example.com / password</p>
+            <p>User: user / password</p>
+            <p>Admin: admin / password</p>
           </div>
         </CardContent>
       </Card>

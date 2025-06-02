@@ -1,10 +1,11 @@
 "use client"
 
-import { updateBookingStatus } from "@/app/actions/bookings"
+import { updateBookingStatus, deleteBooking } from "@/app/actions/bookings"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Calendar, Clock, MapPin, FileText, User, Check, X } from "lucide-react"
+import { Calendar, Clock, MapPin, FileText, User, Check, X, Trash2 } from "lucide-react"
+import { useState } from "react"
 
 interface Booking {
   id: string
@@ -27,6 +28,9 @@ interface AdminBookingListProps {
 }
 
 export function AdminBookingList({ bookings, showActions }: AdminBookingListProps) {
+  const [isDeleting, setIsDeleting] = useState<string | null>(null)
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string; id: string } | null>(null)
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "APPROVED":
@@ -52,8 +56,34 @@ export function AdminBookingList({ bookings, showActions }: AdminBookingListProp
   const handleStatusUpdate = async (bookingId: string, status: "APPROVED" | "REJECTED") => {
     try {
       await updateBookingStatus(bookingId, status)
+      setMessage({
+        type: "success",
+        text: `Booking ${status.toLowerCase()} successfully!`,
+        id: bookingId,
+      })
+
+      // Clear message after 3 seconds
+      setTimeout(() => {
+        setMessage(null)
+      }, 3000)
     } catch (error) {
-      alert("Failed to update booking status")
+      setMessage({
+        type: "error",
+        text: "Failed to update booking status",
+        id: bookingId,
+      })
+    }
+  }
+
+  const handleDeleteBooking = async (bookingId: string) => {
+    if (confirm("Are you sure you want to delete this booking?")) {
+      setIsDeleting(bookingId)
+      try {
+        await deleteBooking(bookingId)
+      } catch (error) {
+        alert("Failed to delete booking")
+        setIsDeleting(null)
+      }
     }
   }
 
@@ -65,7 +95,6 @@ export function AdminBookingList({ bookings, showActions }: AdminBookingListProp
             <Calendar className="h-8 w-8 text-gray-400" />
           </div>
           <p className="text-gray-500 text-lg">No bookings found</p>
-          <p className="text-gray-400 text-sm mt-1">Booking requests will appear here</p>
         </CardContent>
       </Card>
     )
@@ -76,8 +105,22 @@ export function AdminBookingList({ bookings, showActions }: AdminBookingListProp
       {bookings.map((booking) => (
         <Card
           key={booking.id}
-          className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50 hover:shadow-xl transition-shadow duration-200"
+          className={`shadow-lg border-0 bg-gradient-to-br from-white to-gray-50 hover:shadow-xl transition-shadow duration-200 ${
+            isDeleting === booking.id ? "opacity-50 pointer-events-none" : ""
+          }`}
         >
+          {message && message.id === booking.id && (
+            <div
+              className={`mx-4 mt-4 p-3 rounded-lg flex items-center gap-2 ${
+                message.type === "success"
+                  ? "bg-green-50 text-green-800 border border-green-200"
+                  : "bg-red-50 text-red-800 border border-red-200"
+              }`}
+            >
+              <span className="text-sm">{message.text}</span>
+            </div>
+          )}
+
           <CardHeader className="pb-3">
             <div className="flex justify-between items-start">
               <CardTitle className="text-lg flex items-center gap-2">
@@ -128,27 +171,33 @@ export function AdminBookingList({ bookings, showActions }: AdminBookingListProp
               <span className="line-clamp-3">{booking.purpose}</span>
             </div>
 
-            {showActions && booking.status === "PENDING" && (
-              <div className="flex gap-3 pt-2 border-t border-gray-100">
-                <Button
-                  size="sm"
-                  onClick={() => handleStatusUpdate(booking.id, "APPROVED")}
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                >
-                  <Check className="h-4 w-4 mr-1" />
-                  Approve
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => handleStatusUpdate(booking.id, "REJECTED")}
-                  className="flex-1"
-                >
-                  <X className="h-4 w-4 mr-1" />
-                  Reject
-                </Button>
-              </div>
-            )}
+            <div className="flex gap-3 pt-2 border-t border-gray-100">
+              {showActions && booking.status === "PENDING" && (
+                <>
+                  <Button
+                    size="sm"
+                    onClick={() => handleStatusUpdate(booking.id, "APPROVED")}
+                    className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    <Check className="h-4 w-4 mr-1" />
+                    Approve
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => handleStatusUpdate(booking.id, "REJECTED")}
+                    className="flex-1"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Reject
+                  </Button>
+                </>
+              )}
+              <Button size="sm" variant="outline" onClick={() => handleDeleteBooking(booking.id)} className="flex-1">
+                <Trash2 className="h-4 w-4 mr-1" />
+                Delete
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ))}

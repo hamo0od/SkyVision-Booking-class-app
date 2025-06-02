@@ -42,6 +42,9 @@ export function BookingForm({ classrooms }: BookingFormProps) {
       // Reset form elements
       const form = document.querySelector("form") as HTMLFormElement
       form?.reset()
+
+      // Scroll to top
+      window.scrollTo({ top: 0, behavior: "smooth" })
     } catch (error) {
       setMessage({
         type: "error",

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
+import bcrypt from "bcryptjs"
 
 export async function createUser(formData: FormData) {
   const session = await getServerSession(authOptions)
@@ -22,11 +23,13 @@ export async function createUser(formData: FormData) {
   }
 
   const email = formData.get("email") as string
+  const username = formData.get("username") as string
   const name = formData.get("name") as string
+  const password = formData.get("password") as string
   const role = formData.get("role") as "USER" | "ADMIN"
 
   // Validate inputs
-  if (!email || !name || !role) {
+  if (!email || !username || !name || !password || !role) {
     throw new Error("All fields are required")
   }
 
@@ -39,11 +42,25 @@ export async function createUser(formData: FormData) {
     throw new Error("User with this email already exists")
   }
 
+  // Check if username already exists
+  const existingUsername = await prisma.user.findUnique({
+    where: { username },
+  })
+
+  if (existingUsername) {
+    throw new Error("Username already taken")
+  }
+
+  // Hash the password
+  const hashedPassword = await bcrypt.hash(password, 12)
+
   try {
     await prisma.user.create({
       data: {
         email,
+        username,
         name,
+        password: hashedPassword,
         role,
       },
     })
@@ -74,15 +91,33 @@ export async function updateUser(userId: string, formData: FormData) {
 
   const name = formData.get("name") as string
   const role = formData.get("role") as "USER" | "ADMIN"
+  const username = formData.get("username") as string
+  const password = formData.get("password") as string | null
 
-  if (!name || !role) {
-    throw new Error("All fields are required")
+  if (!name || !role || !username) {
+    throw new Error("Required fields are missing")
+  }
+
+  // Check if username already exists (but not for this user)
+  const existingUsername = await prisma.user.findUnique({
+    where: { username },
+  })
+
+  if (existingUsername && existingUsername.id !== userId) {
+    throw new Error("Username already taken")
   }
 
   try {
+    const updateData: any = { name, role, username }
+
+    // Only update password if provided
+    if (password && password.trim() !== "") {
+      updateData.password = await bcrypt.hash(password, 12)
+    }
+
     await prisma.user.update({
       where: { id: userId },
-      data: { name, role },
+      data: updateData,
     })
 
     revalidatePath("/admin/users")

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { UserPlus, CheckCircle, AlertCircle, Mail, User, Shield } from "lucide-react"
+import { UserPlus, CheckCircle, AlertCircle, Mail, User, Shield, Lock } from "lucide-react"
 
 export function CreateUserForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -69,9 +69,25 @@ export function CreateUserForm() {
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-700">
               <User className="inline h-4 w-4 mr-1" />
+              Username
+            </label>
+            <Input type="text" name="username" placeholder="johndoe" required className="w-full" />
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              <User className="inline h-4 w-4 mr-1" />
               Full Name
             </label>
             <Input type="text" name="name" placeholder="John Doe" required className="w-full" />
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              <Lock className="inline h-4 w-4 mr-1" />
+              Password
+            </label>
+            <Input type="password" name="password" placeholder="••••••••" required className="w-full" />
           </div>
 
           <div className="space-y-2">
@@ -117,13 +133,6 @@ export function CreateUserForm() {
               </>
             )}
           </Button>
-
-          <div className="text-xs text-gray-500 mt-2">
-            <p>
-              Default password: <code className="bg-gray-100 px-1 rounded">password</code>
-            </p>
-            <p>Users can sign in immediately with their email and this password.</p>
-          </div>
         </form>
       </CardContent>
     </Card>
