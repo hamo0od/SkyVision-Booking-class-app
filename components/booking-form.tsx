@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { DateTimePicker } from "./date-time-picker"
-import { CalendarDays, Users, MapPin } from "lucide-react"
+import { CalendarDays, Users, MapPin, CheckCircle, AlertCircle } from "lucide-react"
 
 interface Classroom {
   id: string
@@ -25,12 +25,16 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   const [selectedClassroom, setSelectedClassroom] = useState("")
   const [startTime, setStartTime] = useState("")
   const [endTime, setEndTime] = useState("")
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
 
   const handleSubmit = async (formData: FormData) => {
     setIsSubmitting(true)
+    setMessage(null)
+
     try {
-      await createBooking(formData)
-      alert("Booking request submitted successfully!")
+      const result = await createBooking(formData)
+      setMessage({ type: "success", text: result.message })
+
       // Reset form
       setSelectedClassroom("")
       setStartTime("")
@@ -39,7 +43,10 @@ export function BookingForm({ classrooms }: BookingFormProps) {
       const form = document.querySelector("form") as HTMLFormElement
       form?.reset()
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to submit booking")
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to submit booking",
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -56,6 +63,19 @@ export function BookingForm({ classrooms }: BookingFormProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
+        {message && (
+          <div
+            className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${
+              message.type === "success"
+                ? "bg-green-50 text-green-800 border border-green-200"
+                : "bg-red-50 text-red-800 border border-red-200"
+            }`}
+          >
+            {message.type === "success" ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+            <span className="text-sm">{message.text}</span>
+          </div>
+        )}
+
         <form action={handleSubmit} className="space-y-6">
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-700">

@@ -11,28 +11,43 @@ import Link from "next/link"
 export default async function Dashboard() {
   const session = await getServerSession(authOptions)
 
-  if (!session) {
+  if (!session?.user?.email) {
+    redirect("/auth/signin")
+  }
+
+  // Get the actual user from database
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+  })
+
+  if (!user) {
     redirect("/auth/signin")
   }
 
   const classrooms = await prisma.classroom.findMany()
   const userBookings = await prisma.booking.findMany({
-    where: { userId: session.user.id },
+    where: { userId: user.id }, // Use the actual user ID
     include: { classroom: true },
     orderBy: { createdAt: "desc" },
   })
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      <header className="bg-white shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
-            <h1 className="text-3xl font-bold text-gray-900">Classroom Booking System</h1>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              Classroom Booking System
+            </h1>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-700">Welcome, {session.user.name || session.user.email}</span>
-              {session.user.role === "ADMIN" && (
+              <span className="text-sm text-gray-700 bg-gray-100 px-3 py-1 rounded-full">
+                Welcome, {user.name || user.email}
+              </span>
+              {user.role === "ADMIN" && (
                 <Link href="/admin">
-                  <Button variant="outline">Admin Panel</Button>
+                  <Button variant="outline" className="border-blue-200 text-blue-600 hover:bg-blue-50">
+                    Admin Panel
+                  </Button>
                 </Link>
               )}
               <LogoutButton />
@@ -41,15 +56,15 @@ export default async function Dashboard() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <main className="max-w-7xl mx-auto py-8 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div>
-              <h2 className="text-2xl font-bold mb-4">Book a Classroom</h2>
+              <h2 className="text-2xl font-bold mb-6 text-gray-800">Book a Classroom</h2>
               <BookingForm classrooms={classrooms} />
             </div>
             <div>
-              <h2 className="text-2xl font-bold mb-4">Your Bookings</h2>
+              <h2 className="text-2xl font-bold mb-6 text-gray-800">Your Bookings</h2>
               <BookingList bookings={userBookings} />
             </div>
           </div>
