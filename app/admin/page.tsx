@@ -6,7 +6,7 @@ import { AdminBookingList } from "@/components/admin-booking-list"
 import { LogoutButton } from "@/components/logout-button"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Users, Building, ArrowLeft } from "lucide-react"
+import { Users, Building, ArrowLeft, Settings } from "lucide-react"
 import { MobileAdminMenu } from "@/components/mobile-admin-menu"
 
 export default async function AdminPanel() {
@@ -79,6 +79,12 @@ export default async function AdminPanel() {
                 <Button variant="outline" className="border-purple-200 text-purple-600 hover:bg-purple-50">
                   <Building className="h-4 w-4 mr-2" />
                   Manage Classrooms
+                </Button>
+              </Link>
+              <Link href="/admin/profile">
+                <Button variant="outline" className="border-purple-200 text-purple-600 hover:bg-purple-50">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Profile
                 </Button>
               </Link>
               <LogoutButton />
