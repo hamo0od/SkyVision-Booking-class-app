@@ -108,11 +108,6 @@ export default function SignIn() {
               )}
             </Button>
           </form>
-          <div className="mt-4 text-sm text-gray-600">
-            <p>Demo accounts:</p>
-            <p>User: user / password</p>
-            <p>Admin: admin / password</p>
-          </div>
         </CardContent>
       </Card>
     </div>
