@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Calendar, Clock, MapPin, FileText, X } from "lucide-react"
+import { Calendar, Clock, MapPin, FileText, X, UserCheck, Users } from "lucide-react"
 import { cancelBooking } from "@/app/actions/bookings"
 import { useState } from "react"
 
@@ -13,6 +13,8 @@ interface Booking {
   endTime: Date
   purpose: string
   status: string
+  instructorName?: string
+  participants?: number
   classroom: {
     name: string
   }
@@ -146,6 +148,18 @@ export function BookingList({ bookings }: BookingListProps) {
                 })}
               </span>
             </div>
+            {booking.instructorName && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <UserCheck className="h-4 w-4" />
+                <span>Instructor: {booking.instructorName}</span>
+              </div>
+            )}
+            {booking.participants && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <Users className="h-4 w-4" />
+                <span>{booking.participants} participants</span>
+              </div>
+            )}
             <div className="flex items-start gap-2 text-sm text-gray-600">
               <FileText className="h-4 w-4 mt-0.5 flex-shrink-0" />
               <span className="line-clamp-2">{booking.purpose}</span>

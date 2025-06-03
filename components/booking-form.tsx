@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ModernDateTimePicker } from "./modern-date-time-picker"
-import { CalendarDays, Users, MapPin, CheckCircle, AlertCircle, Award } from "lucide-react"
+import { CalendarDays, Users, MapPin, CheckCircle, AlertCircle, Award, UserCheck } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
 interface Classroom {
@@ -135,6 +135,20 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               onChange={setEndTime}
               min={startTime || minDateTime}
               required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1">
+              <UserCheck className="h-4 w-4 text-gray-600" />
+              Instructor Name
+            </Label>
+            <Input
+              type="text"
+              name="instructorName"
+              placeholder="Enter the instructor's full name"
+              required
+              className="w-full"
             />
           </div>
 
