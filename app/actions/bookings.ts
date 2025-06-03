@@ -26,13 +26,14 @@ export async function createBooking(formData: FormData) {
   const endTime = new Date(formData.get("endTime") as string)
   const purpose = formData.get("purpose") as string
   const instructorName = formData.get("instructorName") as string
+  const trainingOrder = formData.get("trainingOrder") as string
   const participants = Number.parseInt(formData.get("participants") as string) || 1
   const ecaaApproval = formData.get("ecaaApproval") === "true"
   const approvalNumber = ecaaApproval ? (formData.get("approvalNumber") as string) : null
   const qualifications = !ecaaApproval ? (formData.get("qualifications") as string) : null
 
   // Validate inputs
-  if (!classroomId || !startTime || !endTime || !purpose || !instructorName) {
+  if (!classroomId || !startTime || !endTime || !purpose || !instructorName || !trainingOrder) {
     throw new Error("All fields are required")
   }
 
@@ -100,6 +101,7 @@ export async function createBooking(formData: FormData) {
         endTime,
         purpose,
         instructorName,
+        trainingOrder,
         participants,
         ecaaApproval,
         approvalNumber,

@@ -39,6 +39,7 @@ model Booking {
   status          BookingStatus @default(PENDING)
   participants    Int           @default(1)
   instructorName  String
+  trainingOrder   String
   ecaaApproval    Boolean       @default(false)
   approvalNumber  String?
   qualifications  String?

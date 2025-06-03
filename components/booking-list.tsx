@@ -14,6 +14,7 @@ interface Booking {
   purpose: string
   status: string
   instructorName?: string
+  trainingOrder?: string
   participants?: number
   classroom: {
     name: string
@@ -152,6 +153,12 @@ export function BookingList({ bookings }: BookingListProps) {
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <UserCheck className="h-4 w-4" />
                 <span>Instructor: {booking.instructorName}</span>
+              </div>
+            )}
+            {booking.trainingOrder && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <FileText className="h-4 w-4" />
+                <span>Training Order: {booking.trainingOrder}</span>
               </div>
             )}
             {booking.participants && (

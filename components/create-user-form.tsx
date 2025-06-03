@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { UserPlus, CheckCircle, AlertCircle, Mail, User, Shield, Lock } from "lucide-react"
+import { UserPlus, CheckCircle, AlertCircle, Mail, User, Shield, Lock, Eye, EyeOff } from "lucide-react"
 
 export function CreateUserForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedRole, setSelectedRole] = useState("")
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleSubmit = async (formData: FormData) => {
     setIsSubmitting(true)
@@ -23,6 +24,7 @@ export function CreateUserForm() {
 
       // Reset form
       setSelectedRole("")
+      setShowPassword(false)
       const form = document.querySelector("form") as HTMLFormElement
       form?.reset()
     } catch (error) {
@@ -87,7 +89,28 @@ export function CreateUserForm() {
               <Lock className="inline h-4 w-4 mr-1" />
               Password
             </label>
-            <Input type="password" name="password" placeholder="••••••••" required className="w-full" />
+            <div className="relative">
+              <Input
+                type={showPassword ? "text" : "password"}
+                name="password"
+                placeholder="••••••••"
+                required
+                className="w-full pr-10"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4 text-gray-400" />
+                ) : (
+                  <Eye className="h-4 w-4 text-gray-400" />
+                )}
+              </Button>
+            </div>
           </div>
 
           <div className="space-y-2">
