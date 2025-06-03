@@ -53,12 +53,12 @@ export function BookingForm({ classrooms }: BookingFormProps) {
 
       if (durationInMinutes > maxDurationInMinutes) {
         setDurationWarning(`Duration exceeds maximum of 2.5 hours (${Math.round(durationInMinutes)} minutes selected)`)
-      } else if (durationInMinutes > 0) {
+      } else if (durationInMinutes <= 0) {
+        setDurationWarning("End time must be after start time")
+      } else {
         const hours = Math.floor(durationInMinutes / 60)
         const minutes = Math.round(durationInMinutes % 60)
         setDurationWarning(`Duration: ${hours}h ${minutes}m (within 2.5h limit)`)
-      } else {
-        setDurationWarning("")
       }
     } else {
       setDurationWarning("")
@@ -67,22 +67,18 @@ export function BookingForm({ classrooms }: BookingFormProps) {
 
   const handleStartTimeChange = (value: string) => {
     setStartTime(value)
-    checkDuration(value, endTime)
+
+    // If end time exists, recalculate with new start time
+    if (endTime) {
+      checkDuration(value, endTime)
+    }
   }
 
   const handleEndTimeChange = (value: string) => {
-    // If we have a start time, use its date for the end time
-    if (startTime && value) {
-      const startDate = new Date(startTime)
-      const [hours, minutes] = value.split(":")
-      const endDateTime = new Date(startDate)
-      endDateTime.setHours(Number.parseInt(hours), Number.parseInt(minutes), 0, 0)
+    setEndTime(value)
 
-      const endTimeString = endDateTime.toISOString().slice(0, 16)
-      setEndTime(endTimeString)
-      checkDuration(startTime, endTimeString)
-    } else {
-      setEndTime(value)
+    // If start time exists, check duration
+    if (startTime) {
       checkDuration(startTime, value)
     }
   }
@@ -118,15 +114,6 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   }
 
   const minDateTime = new Date().toISOString().slice(0, 16)
-
-  // Get minimum time for end time based on start time
-  const getMinEndTime = () => {
-    if (!startTime) return "08:00"
-    const startDate = new Date(startTime)
-    const hours = startDate.getHours().toString().padStart(2, "0")
-    const minutes = startDate.getMinutes().toString().padStart(2, "0")
-    return `${hours}:${minutes}`
-  }
 
   return (
     <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50 w-full">
@@ -194,21 +181,22 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               min={minDateTime}
               required
             />
+
             <ModernDateTimePicker
-              label="End Time"
+              label="End Time (Same Day)"
               name="endTime"
               value={endTime}
               onChange={handleEndTimeChange}
-              min={getMinEndTime()}
+              min={startTime}
               required
               timeOnly={true}
-              disabled={!startTime}
+              linkedDate={startTime}
             />
 
             {durationWarning && (
               <div
                 className={`p-2 rounded-lg flex items-center gap-2 text-sm ${
-                  durationWarning.includes("exceeds")
+                  durationWarning.includes("exceeds") || durationWarning.includes("must be after")
                     ? "bg-red-50 text-red-800 border border-red-200"
                     : "bg-blue-50 text-blue-800 border border-blue-200"
                 }`}
