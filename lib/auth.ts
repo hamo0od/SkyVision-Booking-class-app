@@ -46,6 +46,14 @@ export const authOptions: NextAuthOptions = {
   ],
   session: {
     strategy: "jwt",
+    // Session expires after 8 hours of inactivity
+    maxAge: 8 * 60 * 60, // 8 hours in seconds
+    // Update session expiry on every request (sliding session)
+    updateAge: 60 * 60, // Update every hour
+  },
+  jwt: {
+    // JWT expires after 8 hours
+    maxAge: 8 * 60 * 60, // 8 hours in seconds
   },
   callbacks: {
     jwt: async ({ token, user }) => {
@@ -66,5 +74,36 @@ export const authOptions: NextAuthOptions = {
   },
   pages: {
     signIn: "/auth/signin",
+  },
+  // Handle production vs development URLs
+  callbacks: {
+    ...{
+      jwt: async ({ token, user }) => {
+        if (user) {
+          token.role = user.role
+          token.username = user.username
+        }
+        return token
+      },
+      session: async ({ session, token }) => {
+        if (token) {
+          session.user.id = token.sub
+          session.user.role = token.role
+          session.user.username = token.username
+        }
+        return session
+      },
+    },
+    redirect: async ({ url, baseUrl }) => {
+      // Handle logout redirects
+      if (url.startsWith("/")) {
+        return `${baseUrl}${url}`
+      }
+      // For production, use the actual domain
+      if (url.startsWith(baseUrl)) {
+        return url
+      }
+      return baseUrl + "/auth/signin"
+    },
   },
 }
