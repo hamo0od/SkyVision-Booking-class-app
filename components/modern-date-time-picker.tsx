@@ -13,8 +13,8 @@ interface ModernDateTimePickerProps {
   onChange?: (value: string) => void
   min?: string
   required?: boolean
-  timeOnly?: boolean // New prop for time-only mode
-  linkedDate?: string // Date to use when in time-only mode
+  timeOnly?: boolean
+  linkedDate?: string
 }
 
 export function ModernDateTimePicker({
@@ -27,32 +27,49 @@ export function ModernDateTimePicker({
   timeOnly = false,
   linkedDate,
 }: ModernDateTimePickerProps) {
-  const [selectedDate, setSelectedDate] = useState(value?.split("T")[0] || "")
-  const [selectedTime, setSelectedTime] = useState(value?.split("T")[1]?.slice(0, 5) || "")
+  // Parse initial value if provided
+  const initialDate = value ? value.split("T")[0] : ""
+  const initialTime = value ? value.split("T")[1]?.slice(0, 5) : ""
+
+  const [selectedDate, setSelectedDate] = useState(initialDate)
+  const [selectedTime, setSelectedTime] = useState(initialTime)
   const [showCalendar, setShowCalendar] = useState(false)
   const [currentMonth, setCurrentMonth] = useState(new Date())
 
   const today = new Date()
   const minDate = min ? new Date(min) : today
 
+  // Update when value prop changes
   useEffect(() => {
-    // In time-only mode, use the linked date if provided
+    if (value) {
+      const [date, time] = value.split("T")
+      setSelectedDate(date)
+      setSelectedTime(time?.slice(0, 5) || "")
+    }
+  }, [value])
+
+  // In time-only mode, use the linked date
+  useEffect(() => {
     if (timeOnly && linkedDate) {
       const date = linkedDate.split("T")[0]
-      setSelectedDate(date)
+      if (date) {
+        setSelectedDate(date)
+      }
     }
   }, [timeOnly, linkedDate])
 
+  // Update parent when selection changes
   useEffect(() => {
     if (selectedTime) {
+      let dateToUse = selectedDate
+
+      // In time-only mode, use the linked date
       if (timeOnly && linkedDate) {
-        // In time-only mode, combine the linked date with selected time
-        const date = linkedDate.split("T")[0]
-        const datetime = `${date}T${selectedTime}`
-        onChange?.(datetime)
-      } else if (selectedDate) {
-        // Normal mode - combine selected date and time
-        const datetime = `${selectedDate}T${selectedTime}`
+        dateToUse = linkedDate.split("T")[0]
+      }
+
+      if (dateToUse) {
+        const datetime = `${dateToUse}T${selectedTime}`
         onChange?.(datetime)
       }
     }
@@ -81,7 +98,7 @@ export function ModernDateTimePicker({
     return days
   }
 
-  // Fixed: Use local date formatting to avoid timezone issues
+  // Format date to YYYY-MM-DD
   const formatDate = (date: Date) => {
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, "0")
@@ -89,7 +106,7 @@ export function ModernDateTimePicker({
     return `${year}-${month}-${day}`
   }
 
-  // Fixed: Compare dates properly in local timezone
+  // Check if a date should be disabled
   const isDateDisabled = (date: Date) => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -106,8 +123,13 @@ export function ModernDateTimePicker({
   }
 
   const handleDateSelect = (date: Date) => {
-    setSelectedDate(formatDate(date))
+    const formattedDate = formatDate(date)
+    setSelectedDate(formattedDate)
     setShowCalendar(false)
+  }
+
+  const handleTimeSelect = (time: string) => {
+    setSelectedTime(time)
   }
 
   const navigateMonth = (direction: "prev" | "next") => {
@@ -122,17 +144,22 @@ export function ModernDateTimePicker({
     })
   }
 
-  // Fixed: Get time slots from 8:00 AM to 6:00 PM in 30-minute intervals
-  const timeSlots = []
-  for (let hour = 8; hour <= 18; hour++) {
-    for (let minute = 0; minute < 60; minute += 30) {
-      // Skip 6:30 PM since we want to end at 6:00 PM
-      if (hour === 18 && minute > 0) break
+  // Generate time slots from 8:00 AM to 6:00 PM in 30-minute intervals
+  const generateTimeSlots = () => {
+    const slots = []
+    for (let hour = 8; hour <= 18; hour++) {
+      for (let minute = 0; minute < 60; minute += 30) {
+        // Skip 6:30 PM
+        if (hour === 18 && minute > 0) continue
 
-      const timeString = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
-      timeSlots.push(timeString)
+        const timeString = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
+        slots.push(timeString)
+      }
     }
+    return slots
   }
+
+  const timeSlots = generateTimeSlots()
 
   const days = getDaysInMonth(currentMonth)
   const monthNames = [
@@ -151,7 +178,7 @@ export function ModernDateTimePicker({
   ]
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-  // Fixed: Display selected date properly in local timezone
+  // Display selected date in a readable format
   const displaySelectedDate = () => {
     if (!selectedDate) return "Pick a date"
 
@@ -189,6 +216,14 @@ export function ModernDateTimePicker({
 
   const minTime = getMinTime()
 
+  // Format time for display (12-hour format)
+  const formatTimeDisplay = (timeString: string) => {
+    const [hours, minutes] = timeString.split(":").map(Number)
+    const period = hours >= 12 ? "PM" : "AM"
+    const hour12 = hours % 12 || 12
+    return `${hour12}:${minutes.toString().padStart(2, "0")} ${period}`
+  }
+
   return (
     <div className="space-y-3">
       <Label htmlFor={name} className="text-sm font-medium text-gray-700">
@@ -220,13 +255,9 @@ export function ModernDateTimePicker({
                       className={`w-full justify-start text-left font-normal rounded-none border-0 text-sm ${
                         selectedTime === time ? "bg-blue-600 text-white" : "hover:bg-blue-50"
                       }`}
-                      onClick={() => setSelectedTime(time)}
+                      onClick={() => handleTimeSelect(time)}
                     >
-                      {new Date(`2000-01-01T${time}`).toLocaleTimeString("en-US", {
-                        hour: "numeric",
-                        minute: "2-digit",
-                        hour12: true,
-                      })}
+                      {formatTimeDisplay(time)}
                     </Button>
                   )
                 })}
@@ -325,13 +356,9 @@ export function ModernDateTimePicker({
                         className={`w-full justify-start text-left font-normal rounded-none border-0 text-sm ${
                           selectedTime === time ? "bg-blue-600 text-white" : "hover:bg-blue-50"
                         }`}
-                        onClick={() => setSelectedTime(time)}
+                        onClick={() => handleTimeSelect(time)}
                       >
-                        {new Date(`2000-01-01T${time}`).toLocaleTimeString("en-US", {
-                          hour: "numeric",
-                          minute: "2-digit",
-                          hour12: true,
-                        })}
+                        {formatTimeDisplay(time)}
                       </Button>
                     )
                   })}
