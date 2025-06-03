@@ -154,6 +154,27 @@ export function HorizontalBookingTimeline() {
       </CardHeader>
       <CardContent className="p-3 sm:p-6">
         {/* Horizontal Timeline */}
+        <div className="mb-4">
+          <div className="overflow-x-auto">
+            <div className="flex gap-1 min-w-max">
+              {timeSlots.map((timeSlot) => {
+                const isHourStart = timeSlot.endsWith(":00")
+                return (
+                  <div key={`header-${timeSlot}`} className="min-w-[80px] sm:min-w-[100px] text-center">
+                    {isHourStart && (
+                      <div className="text-xs font-medium text-gray-700 py-1 border-b border-gray-200">{timeSlot}</div>
+                    )}
+                    {!isHourStart && (
+                      <div className="text-xs text-gray-400 py-1 border-b border-gray-100">{timeSlot}</div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Classroom Rows */}
         <div className="space-y-4">
           {timelineData.classrooms.map((classroom) => (
             <div key={classroom.id} className="bg-white rounded-lg border border-gray-200 p-4">
@@ -174,8 +195,6 @@ export function HorizontalBookingTimeline() {
                 <div className="flex gap-1 min-w-max">
                   {timeSlots.map((timeSlot) => {
                     const booking = getBookingForSlot(classroom.id, timeSlot)
-                    const [hours] = timeSlot.split(":").map(Number)
-                    const isHourStart = timeSlot.endsWith(":00")
 
                     if (booking) {
                       const startTime = new Date(booking.startTime)
@@ -189,11 +208,6 @@ export function HorizontalBookingTimeline() {
                             booking.status,
                           )} ${isStartSlot ? "border-l-4 border-l-blue-500" : ""}`}
                         >
-                          {/* Time label for hour starts */}
-                          {isHourStart && (
-                            <div className="absolute -top-6 left-0 text-xs text-gray-500 font-mono">{timeSlot}</div>
-                          )}
-
                           {isStartSlot && (
                             <div className="text-xs space-y-1">
                               <div className="font-medium truncate">{booking.user.name || booking.user.username}</div>
@@ -213,11 +227,6 @@ export function HorizontalBookingTimeline() {
                         key={timeSlot}
                         className="relative min-w-[80px] sm:min-w-[100px] h-16 sm:h-20 p-2 rounded border border-gray-200 bg-green-50 hover:bg-green-100 transition-colors cursor-pointer"
                       >
-                        {/* Time label for hour starts */}
-                        {isHourStart && (
-                          <div className="absolute -top-6 left-0 text-xs text-gray-500 font-mono">{timeSlot}</div>
-                        )}
-
                         <div className="flex items-center justify-center h-full">
                           <div className="text-xs text-green-600 text-center">
                             <span className="hidden sm:inline">Available</span>
