@@ -4,8 +4,9 @@ import { updateBookingStatus, deleteBooking } from "@/app/actions/bookings"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Calendar, Clock, MapPin, FileText, User, Check, X, Trash2 } from "lucide-react"
+import { Calendar, Clock, MapPin, FileText, User, Check, X, Trash2, Eye } from "lucide-react"
 import { useState } from "react"
+import { BookingDetailsModal } from "./booking-details-modal"
 
 interface Booking {
   id: string
@@ -13,12 +14,19 @@ interface Booking {
   endTime: Date
   purpose: string
   status: string
+  participants: number
+  ecaaApproval: boolean
+  approvalNumber: string | null
+  qualifications: string | null
+  instructorName: string
+  trainingOrder: string
   user: {
     name: string | null
     email: string
   }
   classroom: {
     name: string
+    capacity: number
   }
 }
 
@@ -29,6 +37,7 @@ interface AdminBookingListProps {
 
 export function AdminBookingList({ bookings, showActions }: AdminBookingListProps) {
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string; id: string } | null>(null)
 
   const getStatusColor = (status: string) => {
@@ -101,106 +110,133 @@ export function AdminBookingList({ bookings, showActions }: AdminBookingListProp
   }
 
   return (
-    <div className="space-y-4">
-      {bookings.map((booking) => (
-        <Card
-          key={booking.id}
-          className={`shadow-lg border-0 bg-gradient-to-br from-white to-gray-50 hover:shadow-xl transition-shadow duration-200 ${
-            isDeleting === booking.id ? "opacity-50 pointer-events-none" : ""
-          }`}
-        >
-          {message && message.id === booking.id && (
-            <div
-              className={`mx-4 mt-4 p-3 rounded-lg flex items-center gap-2 ${
-                message.type === "success"
-                  ? "bg-green-50 text-green-800 border border-green-200"
-                  : "bg-red-50 text-red-800 border border-red-200"
-              }`}
-            >
-              <span className="text-sm">{message.text}</span>
-            </div>
-          )}
+    <>
+      <div className="space-y-4">
+        {bookings.map((booking) => (
+          <Card
+            key={booking.id}
+            className={`shadow-lg border-0 bg-gradient-to-br from-white to-gray-50 hover:shadow-xl transition-shadow duration-200 ${
+              isDeleting === booking.id ? "opacity-50 pointer-events-none" : ""
+            }`}
+          >
+            {message && message.id === booking.id && (
+              <div
+                className={`mx-4 mt-4 p-3 rounded-lg flex items-center gap-2 ${
+                  message.type === "success"
+                    ? "bg-green-50 text-green-800 border border-green-200"
+                    : "bg-red-50 text-red-800 border border-red-200"
+                }`}
+              >
+                <span className="text-sm">{message.text}</span>
+              </div>
+            )}
 
-          <CardHeader className="pb-3">
-            <div className="flex justify-between items-start">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-blue-600" />
-                {booking.classroom.name}
-              </CardTitle>
-              <Badge className={`${getStatusColor(booking.status)} font-medium`}>
-                <span className="mr-1">{getStatusIcon(booking.status)}</span>
-                {booking.status}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <User className="h-4 w-4" />
-              <span className="font-medium">{booking.user.name || booking.user.email}</span>
-            </div>
+            <CardHeader className="pb-3">
+              <div className="flex justify-between items-start">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-blue-600" />
+                  {booking.classroom.name}
+                </CardTitle>
+                <Badge className={`${getStatusColor(booking.status)} font-medium`}>
+                  <span className="mr-1">{getStatusIcon(booking.status)}</span>
+                  {booking.status}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <User className="h-4 w-4" />
+                <span className="font-medium">{booking.user.name || booking.user.email}</span>
+              </div>
 
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Calendar className="h-4 w-4" />
-              <span className="font-medium">
-                {new Date(booking.startTime).toLocaleDateString("en-US", {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </span>
-            </div>
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <Calendar className="h-4 w-4" />
+                <span className="font-medium">
+                  {new Date(booking.startTime).toLocaleDateString("en-US", {
+                    weekday: "long",
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </span>
+              </div>
 
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Clock className="h-4 w-4" />
-              <span>
-                {new Date(booking.startTime).toLocaleTimeString("en-US", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}{" "}
-                -{" "}
-                {new Date(booking.endTime).toLocaleTimeString("en-US", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </span>
-            </div>
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <Clock className="h-4 w-4" />
+                <span>
+                  {new Date(booking.startTime).toLocaleTimeString("en-US", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}{" "}
+                  -{" "}
+                  {new Date(booking.endTime).toLocaleTimeString("en-US", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </div>
 
-            <div className="flex items-start gap-2 text-sm text-gray-600">
-              <FileText className="h-4 w-4 mt-0.5 flex-shrink-0" />
-              <span className="line-clamp-3">{booking.purpose}</span>
-            </div>
+              <div className="flex items-start gap-2 text-sm text-gray-600">
+                <FileText className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <span className="line-clamp-2">{booking.purpose}</span>
+              </div>
 
-            <div className="flex gap-3 pt-2 border-t border-gray-100">
-              {showActions && booking.status === "PENDING" && (
-                <>
-                  <Button
-                    size="sm"
-                    onClick={() => handleStatusUpdate(booking.id, "APPROVED")}
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                  >
-                    <Check className="h-4 w-4 mr-1" />
-                    Approve
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => handleStatusUpdate(booking.id, "REJECTED")}
-                    className="flex-1"
-                  >
-                    <X className="h-4 w-4 mr-1" />
-                    Reject
-                  </Button>
-                </>
-              )}
-              <Button size="sm" variant="outline" onClick={() => handleDeleteBooking(booking.id)} className="flex-1">
-                <Trash2 className="h-4 w-4 mr-1" />
-                Delete
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setSelectedBooking(booking)}
+                  className="flex-1 sm:flex-none"
+                >
+                  <Eye className="h-4 w-4 mr-1" />
+                  View Details
+                </Button>
+
+                {showActions && booking.status === "PENDING" && (
+                  <>
+                    <Button
+                      size="sm"
+                      onClick={() => handleStatusUpdate(booking.id, "APPROVED")}
+                      className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      <Check className="h-4 w-4 mr-1" />
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleStatusUpdate(booking.id, "REJECTED")}
+                      className="flex-1 sm:flex-none"
+                    >
+                      <X className="h-4 w-4 mr-1" />
+                      Reject
+                    </Button>
+                  </>
+                )}
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleDeleteBooking(booking.id)}
+                  className="flex-1 sm:flex-none border-red-200 text-red-600 hover:bg-red-50"
+                >
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Delete
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Booking Details Modal */}
+      {selectedBooking && (
+        <BookingDetailsModal
+          booking={selectedBooking}
+          isOpen={!!selectedBooking}
+          onClose={() => setSelectedBooking(null)}
+        />
+      )}
+    </>
   )
 }
