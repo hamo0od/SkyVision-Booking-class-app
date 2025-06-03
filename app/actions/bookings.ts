@@ -114,3 +114,85 @@ export async function updateBookingStatus(bookingId: string, status: "APPROVED" 
     throw new Error("Failed to update booking status")
   }
 }
+
+// New function to cancel a booking
+export async function cancelBooking(bookingId: string) {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.user?.email) {
+    throw new Error("Unauthorized - No session found")
+  }
+
+  // Get the actual user from database using email
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+  })
+
+  if (!user) {
+    throw new Error("User not found in database")
+  }
+
+  // Get the booking
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+  })
+
+  if (!booking) {
+    throw new Error("Booking not found")
+  }
+
+  // Check if the user owns this booking or is an admin
+  if (booking.userId !== user.id && user.role !== "ADMIN") {
+    throw new Error("Unauthorized - You can only cancel your own bookings")
+  }
+
+  // Check if the booking is already approved and in the past
+  const now = new Date()
+  if (booking.status === "APPROVED" && booking.startTime < now) {
+    throw new Error("Cannot cancel a booking that has already started or ended")
+  }
+
+  try {
+    // Delete the booking
+    await prisma.booking.delete({
+      where: { id: bookingId },
+    })
+
+    revalidatePath("/dashboard")
+    revalidatePath("/admin")
+    return { success: true, message: "Booking cancelled successfully" }
+  } catch (error) {
+    console.error("Database error:", error)
+    throw new Error("Failed to cancel booking. Please try again.")
+  }
+}
+
+export async function deleteBooking(bookingId: string) {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.user?.email) {
+    throw new Error("Unauthorized")
+  }
+
+  // Get the actual user from database using email
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+  })
+
+  if (!user || user.role !== "ADMIN") {
+    throw new Error("Unauthorized - Admin access required")
+  }
+
+  try {
+    await prisma.booking.delete({
+      where: { id: bookingId },
+    })
+
+    revalidatePath("/admin")
+    revalidatePath("/dashboard")
+    return { success: true }
+  } catch (error) {
+    console.error("Database error:", error)
+    throw new Error("Failed to delete booking")
+  }
+}

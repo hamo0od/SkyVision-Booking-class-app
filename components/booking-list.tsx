@@ -1,6 +1,11 @@
+"use client"
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, Clock, MapPin, FileText } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Calendar, Clock, MapPin, FileText, X } from "lucide-react"
+import { cancelBooking } from "@/app/actions/bookings"
+import { useState } from "react"
 
 interface Booking {
   id: string
@@ -18,6 +23,9 @@ interface BookingListProps {
 }
 
 export function BookingList({ bookings }: BookingListProps) {
+  const [isLoading, setIsLoading] = useState<string | null>(null)
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string; id: string } | null>(null)
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "APPROVED":
@@ -37,6 +45,33 @@ export function BookingList({ bookings }: BookingListProps) {
         return "✗"
       default:
         return "⏳"
+    }
+  }
+
+  const handleCancelBooking = async (bookingId: string) => {
+    if (confirm("Are you sure you want to cancel this booking request?")) {
+      setIsLoading(bookingId)
+      try {
+        const result = await cancelBooking(bookingId)
+        setMessage({
+          type: "success",
+          text: result.message || "Booking cancelled successfully",
+          id: bookingId,
+        })
+
+        // Clear message after 3 seconds
+        setTimeout(() => {
+          setMessage(null)
+        }, 3000)
+      } catch (error) {
+        setMessage({
+          type: "error",
+          text: error instanceof Error ? error.message : "Failed to cancel booking",
+          id: bookingId,
+        })
+      } finally {
+        setIsLoading(null)
+      }
     }
   }
 
@@ -61,6 +96,18 @@ export function BookingList({ bookings }: BookingListProps) {
           key={booking.id}
           className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50 hover:shadow-xl transition-shadow duration-200"
         >
+          {message && message.id === booking.id && (
+            <div
+              className={`mx-4 mt-4 p-3 rounded-lg flex items-center gap-2 ${
+                message.type === "success"
+                  ? "bg-green-50 text-green-800 border border-green-200"
+                  : "bg-red-50 text-red-800 border border-red-200"
+              }`}
+            >
+              <span className="text-sm">{message.text}</span>
+            </div>
+          )}
+
           <CardHeader className="pb-3">
             <div className="flex justify-between items-start">
               <CardTitle className="text-lg flex items-center gap-2">
@@ -103,6 +150,23 @@ export function BookingList({ bookings }: BookingListProps) {
               <FileText className="h-4 w-4 mt-0.5 flex-shrink-0" />
               <span className="line-clamp-2">{booking.purpose}</span>
             </div>
+
+            {/* Only show cancel button for pending bookings or future approved bookings */}
+            {(booking.status === "PENDING" ||
+              (booking.status === "APPROVED" && new Date(booking.startTime) > new Date())) && (
+              <div className="pt-2 border-t border-gray-100">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                  onClick={() => handleCancelBooking(booking.id)}
+                  disabled={isLoading === booking.id}
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  {isLoading === booking.id ? "Cancelling..." : "Cancel Booking"}
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       ))}
