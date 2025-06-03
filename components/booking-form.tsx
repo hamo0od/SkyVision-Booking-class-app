@@ -71,8 +71,20 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   }
 
   const handleEndTimeChange = (value: string) => {
-    setEndTime(value)
-    checkDuration(startTime, value)
+    // If we have a start time, use its date for the end time
+    if (startTime && value) {
+      const startDate = new Date(startTime)
+      const [hours, minutes] = value.split(":")
+      const endDateTime = new Date(startDate)
+      endDateTime.setHours(Number.parseInt(hours), Number.parseInt(minutes), 0, 0)
+
+      const endTimeString = endDateTime.toISOString().slice(0, 16)
+      setEndTime(endTimeString)
+      checkDuration(startTime, endTimeString)
+    } else {
+      setEndTime(value)
+      checkDuration(startTime, value)
+    }
   }
 
   const handleSubmit = async (formData: FormData) => {
@@ -106,6 +118,15 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   }
 
   const minDateTime = new Date().toISOString().slice(0, 16)
+
+  // Get minimum time for end time based on start time
+  const getMinEndTime = () => {
+    if (!startTime) return "08:00"
+    const startDate = new Date(startTime)
+    const hours = startDate.getHours().toString().padStart(2, "0")
+    const minutes = startDate.getMinutes().toString().padStart(2, "0")
+    return `${hours}:${minutes}`
+  }
 
   return (
     <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50 w-full">
@@ -166,7 +187,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
 
           <div className="space-y-4">
             <ModernDateTimePicker
-              label="Start Time"
+              label="Start Date & Time"
               name="startTime"
               value={startTime}
               onChange={handleStartTimeChange}
@@ -178,8 +199,10 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               name="endTime"
               value={endTime}
               onChange={handleEndTimeChange}
-              min={startTime || minDateTime}
+              min={getMinEndTime()}
               required
+              timeOnly={true}
+              disabled={!startTime}
             />
 
             {durationWarning && (
