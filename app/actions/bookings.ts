@@ -25,6 +25,10 @@ export async function createBooking(formData: FormData) {
   const startTime = new Date(formData.get("startTime") as string)
   const endTime = new Date(formData.get("endTime") as string)
   const purpose = formData.get("purpose") as string
+  const participants = Number.parseInt(formData.get("participants") as string) || 1
+  const ecaaApproval = formData.get("ecaaApproval") === "true"
+  const approvalNumber = ecaaApproval ? (formData.get("approvalNumber") as string) : null
+  const qualifications = !ecaaApproval ? (formData.get("qualifications") as string) : null
 
   // Validate inputs
   if (!classroomId || !startTime || !endTime || !purpose) {
@@ -37,6 +41,27 @@ export async function createBooking(formData: FormData) {
 
   if (startTime < new Date()) {
     throw new Error("Cannot book time in the past")
+  }
+
+  if (participants < 1) {
+    throw new Error("Number of participants must be at least 1")
+  }
+
+  if (ecaaApproval && !approvalNumber) {
+    throw new Error("ECAA approval number is required")
+  }
+
+  if (!ecaaApproval && !qualifications) {
+    throw new Error("Qualifications are required if you don't have ECAA approval")
+  }
+
+  // Check classroom capacity
+  const classroom = await prisma.classroom.findUnique({
+    where: { id: classroomId },
+  })
+
+  if (classroom && participants > classroom.capacity) {
+    throw new Error(`This classroom can only accommodate ${classroom.capacity} participants`)
   }
 
   // Check for conflicts
@@ -68,11 +93,15 @@ export async function createBooking(formData: FormData) {
   try {
     await prisma.booking.create({
       data: {
-        userId: user.id, // Use the actual user ID from database
+        userId: user.id,
         classroomId,
         startTime,
         endTime,
         purpose,
+        participants,
+        ecaaApproval,
+        approvalNumber,
+        qualifications,
       },
     })
 

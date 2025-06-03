@@ -22,6 +22,10 @@ interface Booking {
     name: string | null
     username: string
   }
+  participants?: number
+  ecaaApproval?: boolean
+  approvalNumber?: string
+  qualifications?: string
 }
 
 interface Classroom {
@@ -104,6 +108,11 @@ export function BookingTimeline() {
       const endTime = new Date(booking.endTime)
       return booking.classroom.id === classroomId && slotTime >= startTime && slotTime < endTime
     })
+  }
+
+  const isBookingStartSlot = (booking: Booking, timeSlot: string) => {
+    const startTime = new Date(booking.startTime)
+    return timeSlot === startTime.toTimeString().slice(0, 5)
   }
 
   const getStatusColor = (status: string) => {
@@ -195,9 +204,9 @@ export function BookingTimeline() {
                       const booking = getBookingForSlot(classroom.id, timeSlot)
 
                       if (booking) {
+                        const isStartSlot = isBookingStartSlot(booking, timeSlot)
                         const startTime = new Date(booking.startTime)
                         const endTime = new Date(booking.endTime)
-                        const isStartSlot = timeSlot === startTime.toTimeString().slice(0, 5)
 
                         return (
                           <div
@@ -219,6 +228,12 @@ export function BookingTimeline() {
                                   {booking.status}
                                 </Badge>
                               </>
+                            )}
+                            {!isStartSlot && (
+                              <div className="text-xs text-center text-gray-500">
+                                <span className="hidden sm:inline">Booked</span>
+                                <span className="sm:hidden">•••</span>
+                              </div>
                             )}
                           </div>
                         )

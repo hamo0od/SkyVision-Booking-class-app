@@ -4,10 +4,13 @@ import { useState } from "react"
 import { createBooking } from "@/app/actions/bookings"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ModernDateTimePicker } from "./modern-date-time-picker"
-import { CalendarDays, Users, MapPin, CheckCircle, AlertCircle } from "lucide-react"
+import { CalendarDays, Users, MapPin, CheckCircle, AlertCircle, Award } from "lucide-react"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
 interface Classroom {
   id: string
@@ -26,6 +29,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   const [startTime, setStartTime] = useState("")
   const [endTime, setEndTime] = useState("")
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const [hasEcaaApproval, setHasEcaaApproval] = useState("false")
 
   const handleSubmit = async (formData: FormData) => {
     setIsSubmitting(true)
@@ -39,6 +43,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
       setSelectedClassroom("")
       setStartTime("")
       setEndTime("")
+      setHasEcaaApproval("false")
       // Reset form elements
       const form = document.querySelector("form") as HTMLFormElement
       form?.reset()
@@ -131,6 +136,76 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               min={startTime || minDateTime}
               required
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1">
+              <Users className="h-4 w-4 text-gray-600" />
+              Number of Participants
+            </Label>
+            <Input
+              type="number"
+              name="participants"
+              min="1"
+              max="100"
+              placeholder="Enter number of participants"
+              required
+              className="w-full"
+            />
+          </div>
+
+          <div className="space-y-3">
+            <Label className="flex items-center gap-1">
+              <Award className="h-4 w-4 text-gray-600" />
+              ECAA Approval Status
+            </Label>
+            <RadioGroup
+              name="ecaaApproval"
+              value={hasEcaaApproval}
+              onValueChange={setHasEcaaApproval}
+              className="flex flex-col space-y-1"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="true" id="ecaa-yes" />
+                <Label htmlFor="ecaa-yes" className="font-normal">
+                  Yes, I have ECAA Approval
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="false" id="ecaa-no" />
+                <Label htmlFor="ecaa-no" className="font-normal">
+                  No, I don't have ECAA Approval
+                </Label>
+              </div>
+            </RadioGroup>
+
+            {hasEcaaApproval === "true" ? (
+              <div className="pt-2">
+                <Label htmlFor="approvalNumber" className="text-sm">
+                  ECAA Approval Number
+                </Label>
+                <Input
+                  id="approvalNumber"
+                  name="approvalNumber"
+                  placeholder="Enter your ECAA approval number"
+                  required
+                  className="mt-1"
+                />
+              </div>
+            ) : (
+              <div className="pt-2">
+                <Label htmlFor="qualifications" className="text-sm">
+                  Your Qualifications
+                </Label>
+                <Textarea
+                  id="qualifications"
+                  name="qualifications"
+                  placeholder="Describe your qualifications and experience"
+                  required
+                  className="mt-1 min-h-[80px]"
+                />
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">
