@@ -122,10 +122,13 @@ export function ModernDateTimePicker({
     })
   }
 
-  // Get time slots from 8 AM to 10 PM in 30-minute intervals
+  // Fixed: Get time slots from 8:00 AM to 6:00 PM in 30-minute intervals
   const timeSlots = []
-  for (let hour = 8; hour < 22; hour++) {
+  for (let hour = 8; hour <= 18; hour++) {
     for (let minute = 0; minute < 60; minute += 30) {
+      // Skip 6:30 PM since we want to end at 6:00 PM
+      if (hour === 18 && minute > 0) break
+
       const timeString = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
       timeSlots.push(timeString)
     }
@@ -199,7 +202,7 @@ export function ModernDateTimePicker({
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm font-medium text-gray-600">
                 <Clock className="h-4 w-4 text-blue-500" />
-                <span>Select Time</span>
+                <span>Select Time (8:00 AM - 6:00 PM)</span>
               </div>
 
               <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md">
@@ -304,7 +307,7 @@ export function ModernDateTimePicker({
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium text-gray-600">
                   <Clock className="h-4 w-4 text-blue-500" />
-                  <span>Select Time</span>
+                  <span>Select Time (8:00 AM - 6:00 PM)</span>
                 </div>
 
                 <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md">
