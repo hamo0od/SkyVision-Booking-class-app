@@ -22,8 +22,21 @@ export async function createBooking(formData: FormData) {
   }
 
   const classroomId = formData.get("classroomId") as string
-  const startTime = new Date(formData.get("startTime") as string)
-  const endTime = new Date(formData.get("endTime") as string)
+  const startTimeValue = formData.get("startTime") as string
+  const endTimeValue = formData.get("endTime") as string
+
+  // Validate start and end times
+  if (!startTimeValue || !endTimeValue) {
+    throw new Error("Please select both start and end times")
+  }
+
+  const startTime = new Date(startTimeValue)
+  const endTime = new Date(endTimeValue)
+
+  if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+    throw new Error("Invalid date or time selected")
+  }
+
   const purpose = formData.get("purpose") as string
   const instructorName = formData.get("instructorName") as string
   const trainingOrder = formData.get("trainingOrder") as string

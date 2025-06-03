@@ -48,6 +48,12 @@ export function BookingForm({ classrooms }: BookingFormProps) {
     if (start && end) {
       const startDate = new Date(start)
       const endDate = new Date(end)
+
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        setDurationWarning("Invalid date or time")
+        return
+      }
+
       const durationInMinutes = (endDate.getTime() - startDate.getTime()) / (1000 * 60)
       const maxDurationInMinutes = 2.5 * 60 // 150 minutes
 
@@ -86,6 +92,24 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   const handleSubmit = async (formData: FormData) => {
     setIsSubmitting(true)
     setMessage(null)
+
+    const startTimeValue = formData.get("startTime") as string
+    const endTimeValue = formData.get("endTime") as string
+
+    if (!startTimeValue || !endTimeValue) {
+      setMessage({ type: "error", text: "Please select both start and end times" })
+      setIsSubmitting(false)
+      return
+    }
+
+    const startTimeDate = new Date(startTimeValue)
+    const endTimeDate = new Date(endTimeValue)
+
+    if (isNaN(startTimeDate.getTime()) || isNaN(endTimeDate.getTime())) {
+      setMessage({ type: "error", text: "Invalid date or time selected" })
+      setIsSubmitting(false)
+      return
+    }
 
     try {
       const result = await createBooking(formData)
@@ -181,13 +205,12 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               min={minDateTime}
               required
             />
-
             <ModernDateTimePicker
               label="End Time (Same Day)"
               name="endTime"
               value={endTime}
               onChange={handleEndTimeChange}
-              min={startTime}
+              min={minDateTime}
               required
               timeOnly={true}
               linkedDate={startTime}
