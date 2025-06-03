@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db"
 import { redirect } from "next/navigation"
 import { BookingForm } from "@/components/booking-form"
 import { BookingList } from "@/components/booking-list"
-import { HorizontalBookingTimeline } from "@/components/horizontal-booking-timeline"
+import { BookingTimeline } from "@/components/booking-timeline"
 import { Button } from "@/components/ui/button"
 import { LogoutButton } from "@/components/logout-button"
 import Link from "next/link"
@@ -75,7 +75,7 @@ export default async function Dashboard() {
 
       <main className="max-w-7xl mx-auto py-4 sm:py-6 lg:py-8 px-4 sm:px-6 lg:px-8">
         <div className="space-y-6 lg:space-y-8">
-          {/* Booking Form and User Bookings - Now at the top */}
+          {/* Booking Form and User Bookings - At the top */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 lg:gap-8">
             <div className="w-full">
               <h2 className="text-xl sm:text-2xl font-bold mb-4 lg:mb-6 text-gray-800">Book a Classroom</h2>
@@ -87,10 +87,10 @@ export default async function Dashboard() {
             </div>
           </div>
 
-          {/* Horizontal Timeline Section - Now at the bottom */}
+          {/* Vertical Timeline Section - Below the booking sections */}
           <div className="w-full">
             <h2 className="text-xl sm:text-2xl font-bold mb-4 lg:mb-6 text-gray-800">Today's Schedule</h2>
-            <HorizontalBookingTimeline />
+            <BookingTimeline />
           </div>
         </div>
       </main>

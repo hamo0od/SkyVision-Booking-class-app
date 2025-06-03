@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import { HorizontalBookingTimeline } from "@/components/horizontal-booking-timeline"
+import { BookingTimeline } from "@/components/booking-timeline"
 import { Button } from "@/components/ui/button"
 import { LogoutButton } from "@/components/logout-button"
 import Link from "next/link"
@@ -36,7 +36,7 @@ export default async function TimelinePage() {
       </header>
 
       <main className="max-w-7xl mx-auto py-4 sm:py-6 lg:py-8 px-4 sm:px-6 lg:px-8">
-        <HorizontalBookingTimeline />
+        <BookingTimeline />
       </main>
     </div>
   )

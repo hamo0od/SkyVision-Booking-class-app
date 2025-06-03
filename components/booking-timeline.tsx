@@ -82,9 +82,10 @@ export function BookingTimeline() {
     })
   }
 
+  // Generate time slots from 8 AM to 5 PM (17:00)
   const generateTimeSlots = () => {
     const slots = []
-    for (let hour = 8; hour <= 22; hour++) {
+    for (let hour = 8; hour <= 17; hour++) {
       for (let minute = 0; minute < 60; minute += 30) {
         const time = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
         slots.push(time)
@@ -135,7 +136,7 @@ export function BookingTimeline() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
             <Calendar className="h-5 w-5 text-blue-600" />
-            Booking Timeline
+            Daily Schedule (8 AM - 5 PM)
           </CardTitle>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => changeDate(-1)} className="p-2">
