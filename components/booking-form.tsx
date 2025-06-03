@@ -19,6 +19,7 @@ import {
   UserCheck,
   FileText,
   BookOpen,
+  Clock,
 } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
@@ -40,6 +41,39 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   const [endTime, setEndTime] = useState("")
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [hasEcaaApproval, setHasEcaaApproval] = useState("false")
+  const [durationWarning, setDurationWarning] = useState("")
+
+  // Calculate duration and show warning if needed
+  const checkDuration = (start: string, end: string) => {
+    if (start && end) {
+      const startDate = new Date(start)
+      const endDate = new Date(end)
+      const durationInMinutes = (endDate.getTime() - startDate.getTime()) / (1000 * 60)
+      const maxDurationInMinutes = 2.5 * 60 // 150 minutes
+
+      if (durationInMinutes > maxDurationInMinutes) {
+        setDurationWarning(`Duration exceeds maximum of 2.5 hours (${Math.round(durationInMinutes)} minutes selected)`)
+      } else if (durationInMinutes > 0) {
+        const hours = Math.floor(durationInMinutes / 60)
+        const minutes = Math.round(durationInMinutes % 60)
+        setDurationWarning(`Duration: ${hours}h ${minutes}m (within 2.5h limit)`)
+      } else {
+        setDurationWarning("")
+      }
+    } else {
+      setDurationWarning("")
+    }
+  }
+
+  const handleStartTimeChange = (value: string) => {
+    setStartTime(value)
+    checkDuration(value, endTime)
+  }
+
+  const handleEndTimeChange = (value: string) => {
+    setEndTime(value)
+    checkDuration(startTime, value)
+  }
 
   const handleSubmit = async (formData: FormData) => {
     setIsSubmitting(true)
@@ -54,6 +88,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
       setStartTime("")
       setEndTime("")
       setHasEcaaApproval("false")
+      setDurationWarning("")
       // Reset form elements
       const form = document.querySelector("form") as HTMLFormElement
       form?.reset()
@@ -134,7 +169,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               label="Start Time"
               name="startTime"
               value={startTime}
-              onChange={setStartTime}
+              onChange={handleStartTimeChange}
               min={minDateTime}
               required
             />
@@ -142,10 +177,23 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               label="End Time"
               name="endTime"
               value={endTime}
-              onChange={setEndTime}
+              onChange={handleEndTimeChange}
               min={startTime || minDateTime}
               required
             />
+
+            {durationWarning && (
+              <div
+                className={`p-2 rounded-lg flex items-center gap-2 text-sm ${
+                  durationWarning.includes("exceeds")
+                    ? "bg-red-50 text-red-800 border border-red-200"
+                    : "bg-blue-50 text-blue-800 border border-blue-200"
+                }`}
+              >
+                <Clock className="h-4 w-4 flex-shrink-0" />
+                <span>{durationWarning}</span>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">
