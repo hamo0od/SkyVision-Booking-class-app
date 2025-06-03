@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Calendar, Clock, MapPin, FileText, X, UserCheck, Users } from "lucide-react"
+import { Calendar, Clock, MapPin, X, UserCheck, Users, BookOpen } from "lucide-react"
 import { cancelBooking } from "@/app/actions/bookings"
 import { useState } from "react"
 
@@ -157,7 +157,7 @@ export function BookingList({ bookings }: BookingListProps) {
             )}
             {booking.trainingOrder && (
               <div className="flex items-center gap-2 text-sm text-gray-600">
-                <FileText className="h-4 w-4" />
+                <MapPin className="h-4 w-4" />
                 <span>Training Order: {booking.trainingOrder}</span>
               </div>
             )}
@@ -168,8 +168,8 @@ export function BookingList({ bookings }: BookingListProps) {
               </div>
             )}
             <div className="flex items-start gap-2 text-sm text-gray-600">
-              <FileText className="h-4 w-4 mt-0.5 flex-shrink-0" />
-              <span className="line-clamp-2">{booking.purpose}</span>
+              <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <span className="line-clamp-2">Course: {booking.purpose}</span>
             </div>
 
             {/* Only show cancel button for pending bookings or future approved bookings */}

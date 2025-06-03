@@ -9,7 +9,17 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ModernDateTimePicker } from "./modern-date-time-picker"
-import { CalendarDays, Users, MapPin, CheckCircle, AlertCircle, Award, UserCheck, FileText } from "lucide-react"
+import {
+  CalendarDays,
+  Users,
+  MapPin,
+  CheckCircle,
+  AlertCircle,
+  Award,
+  UserCheck,
+  FileText,
+  BookOpen,
+} from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
 interface Classroom {
@@ -237,10 +247,13 @@ export function BookingForm({ classrooms }: BookingFormProps) {
           </div>
 
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700">Purpose of Booking</label>
+            <label className="block text-sm font-medium text-gray-700 flex items-center gap-1">
+              <BookOpen className="h-4 w-4" />
+              Course Title
+            </label>
             <Textarea
               name="purpose"
-              placeholder="Describe the purpose of your booking (e.g., Team meeting, Training session, Workshop...)"
+              placeholder="Enter the course title (e.g., Private Pilot License Ground School, Instrument Rating Course, Commercial Pilot Training...)"
               required
               className="min-h-[80px] sm:min-h-[100px] resize-none text-sm"
             />

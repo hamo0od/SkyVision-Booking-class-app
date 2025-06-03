@@ -3,7 +3,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Calendar, Clock, MapPin, FileText, User, Users, GraduationCap, Award, BookOpen, X } from "lucide-react"
+import { Calendar, Clock, MapPin, User, Users, GraduationCap, Award, BookOpen, X } from "lucide-react"
 
 interface Booking {
   id: string
@@ -158,7 +158,7 @@ export function BookingDetailsModal({ booking, isOpen, onClose }: BookingDetails
               <div className="md:col-span-2">
                 <label className="text-sm font-medium text-gray-600">Training Order</label>
                 <p className="text-gray-900 flex items-center gap-1">
-                  <BookOpen className="h-4 w-4" />
+                  <MapPin className="h-4 w-4" />
                   {booking.trainingOrder}
                 </p>
               </div>
@@ -197,11 +197,11 @@ export function BookingDetailsModal({ booking, isOpen, onClose }: BookingDetails
             </div>
           </div>
 
-          {/* Purpose */}
+          {/* Course Title */}
           <div className="bg-orange-50 p-4 rounded-lg">
             <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              Purpose
+              <BookOpen className="h-4 w-4" />
+              Course Title
             </h3>
             <p className="text-gray-900 leading-relaxed">{booking.purpose}</p>
           </div>
