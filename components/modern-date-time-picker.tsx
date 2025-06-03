@@ -39,6 +39,26 @@ export function ModernDateTimePicker({
   const today = new Date()
   const minDate = min ? new Date(min) : today
 
+  // Auto-advance to next day if current time is past business hours
+  useEffect(() => {
+    if (!timeOnly && !selectedDate) {
+      const now = new Date()
+      const currentHour = now.getHours()
+
+      // If it's past 6 PM (18:00), automatically set to next day
+      if (currentHour >= 18) {
+        const tomorrow = new Date(now)
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        const tomorrowString = formatDate(tomorrow)
+        setSelectedDate(tomorrowString)
+      } else {
+        // Set to today if within business hours
+        const todayString = formatDate(now)
+        setSelectedDate(todayString)
+      }
+    }
+  }, [timeOnly, selectedDate])
+
   // Update when value prop changes
   useEffect(() => {
     if (value) {
@@ -60,7 +80,7 @@ export function ModernDateTimePicker({
 
   // Update parent when selection changes
   useEffect(() => {
-    if (selectedTime) {
+    if (selectedTime && selectedDate) {
       let dateToUse = selectedDate
 
       // In time-only mode, use the linked date
@@ -159,7 +179,32 @@ export function ModernDateTimePicker({
     return slots
   }
 
-  const timeSlots = generateTimeSlots()
+  // Get available time slots based on selected date
+  const getAvailableTimeSlots = () => {
+    const allSlots = generateTimeSlots()
+
+    // If no date selected, return all slots
+    if (!selectedDate) return allSlots
+
+    const selectedDateObj = new Date(selectedDate + "T00:00:00")
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    // If selected date is today, filter out past times
+    if (selectedDateObj.getTime() === today.getTime()) {
+      const now = new Date()
+      const currentHour = now.getHours()
+      const currentMinute = now.getMinutes()
+      const currentTimeString = `${currentHour.toString().padStart(2, "0")}:${currentMinute.toString().padStart(2, "0")}`
+
+      return allSlots.filter((slot) => slot > currentTimeString)
+    }
+
+    // For future dates, return all slots
+    return allSlots
+  }
+
+  const availableTimeSlots = getAvailableTimeSlots()
 
   const days = getDaysInMonth(currentMonth)
   const monthNames = [
@@ -193,29 +238,6 @@ export function ModernDateTimePicker({
     })
   }
 
-  // Get minimum time based on min prop
-  const getMinTime = () => {
-    if (!min) return null
-
-    const minDateTime = new Date(min)
-    const now = new Date()
-
-    // If min date is today, return current time
-    if (
-      minDateTime.getDate() === now.getDate() &&
-      minDateTime.getMonth() === now.getMonth() &&
-      minDateTime.getFullYear() === now.getFullYear()
-    ) {
-      return (
-        minDateTime.getHours().toString().padStart(2, "0") + ":" + minDateTime.getMinutes().toString().padStart(2, "0")
-      )
-    }
-
-    return null
-  }
-
-  const minTime = getMinTime()
-
   // Format time for display (12-hour format)
   const formatTimeDisplay = (timeString: string) => {
     const [hours, minutes] = timeString.split(":").map(Number)
@@ -241,26 +263,19 @@ export function ModernDateTimePicker({
               </div>
 
               <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md">
-                {timeSlots.map((time) => {
-                  // Skip times before minimum time if on same day
-                  if (minTime && time < minTime) {
-                    return null
-                  }
-
-                  return (
-                    <Button
-                      key={time}
-                      type="button"
-                      variant={selectedTime === time ? "default" : "ghost"}
-                      className={`w-full justify-start text-left font-normal rounded-none border-0 text-sm ${
-                        selectedTime === time ? "bg-blue-600 text-white" : "hover:bg-blue-50"
-                      }`}
-                      onClick={() => handleTimeSelect(time)}
-                    >
-                      {formatTimeDisplay(time)}
-                    </Button>
-                  )
-                })}
+                {availableTimeSlots.map((time) => (
+                  <Button
+                    key={time}
+                    type="button"
+                    variant={selectedTime === time ? "default" : "ghost"}
+                    className={`w-full justify-start text-left font-normal rounded-none border-0 text-sm ${
+                      selectedTime === time ? "bg-blue-600 text-white" : "hover:bg-blue-50"
+                    }`}
+                    onClick={() => handleTimeSelect(time)}
+                  >
+                    {formatTimeDisplay(time)}
+                  </Button>
+                ))}
               </div>
             </div>
           ) : (
@@ -342,13 +357,8 @@ export function ModernDateTimePicker({
                 </div>
 
                 <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md">
-                  {timeSlots.map((time) => {
-                    // Skip times before minimum time if on same day
-                    if (minTime && time < minTime) {
-                      return null
-                    }
-
-                    return (
+                  {availableTimeSlots.length > 0 ? (
+                    availableTimeSlots.map((time) => (
                       <Button
                         key={time}
                         type="button"
@@ -360,8 +370,10 @@ export function ModernDateTimePicker({
                       >
                         {formatTimeDisplay(time)}
                       </Button>
-                    )
-                  })}
+                    ))
+                  ) : (
+                    <div className="p-4 text-center text-gray-500 text-sm">No available time slots for this date</div>
+                  )}
                 </div>
               </div>
             </div>
