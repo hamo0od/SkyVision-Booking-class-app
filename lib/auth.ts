@@ -55,6 +55,10 @@ export const authOptions: NextAuthOptions = {
     // JWT expires after 8 hours
     maxAge: 8 * 60 * 60, // 8 hours in seconds
   },
+  pages: {
+    signIn: "/auth/signin",
+  },
+  // Handle production vs development URLs
   callbacks: {
     jwt: async ({ token, user }) => {
       if (user) {
@@ -70,29 +74,6 @@ export const authOptions: NextAuthOptions = {
         session.user.username = token.username
       }
       return session
-    },
-  },
-  pages: {
-    signIn: "/auth/signin",
-  },
-  // Handle production vs development URLs
-  callbacks: {
-    ...{
-      jwt: async ({ token, user }) => {
-        if (user) {
-          token.role = user.role
-          token.username = user.username
-        }
-        return token
-      },
-      session: async ({ session, token }) => {
-        if (token) {
-          session.user.id = token.sub
-          session.user.role = token.role
-          session.user.username = token.username
-        }
-        return session
-      },
     },
     redirect: async ({ url, baseUrl }) => {
       // Handle logout redirects
