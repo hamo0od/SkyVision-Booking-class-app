@@ -4,6 +4,8 @@ import bcrypt from "bcryptjs"
 const prisma = new PrismaClient()
 
 async function main() {
+  console.log("Starting database seed...")
+
   // Create classrooms
   const classroom1 = await prisma.classroom.upsert({
     where: { name: "Room A" },
@@ -25,13 +27,18 @@ async function main() {
     },
   })
 
+  console.log("Classrooms created")
+
   // Hash passwords
   const hashedPassword = await bcrypt.hash("password", 12)
+  console.log("Password hashed successfully")
 
   // Create admin user
-  await prisma.user.upsert({
+  const adminUser = await prisma.user.upsert({
     where: { email: "admin@example.com" },
-    update: {},
+    update: {
+      password: hashedPassword, // Update password in case it was wrong
+    },
     create: {
       email: "admin@example.com",
       username: "admin",
@@ -42,9 +49,11 @@ async function main() {
   })
 
   // Create regular user
-  await prisma.user.upsert({
+  const regularUser = await prisma.user.upsert({
     where: { email: "user@example.com" },
-    update: {},
+    update: {
+      password: hashedPassword, // Update password in case it was wrong
+    },
     create: {
       email: "user@example.com",
       username: "user",
@@ -54,8 +63,12 @@ async function main() {
     },
   })
 
+  console.log("Users created/updated:")
+  console.log("Admin:", adminUser.username, adminUser.email)
+  console.log("User:", regularUser.username, regularUser.email)
+
   console.log("Database seeded successfully!")
-  console.log("Demo accounts created:")
+  console.log("Demo accounts:")
   console.log("Admin: admin / password")
   console.log("User: user / password")
   console.log("Classrooms created: Room A (30 capacity), Room B (20 capacity)")
@@ -63,7 +76,7 @@ async function main() {
 
 main()
   .catch((e) => {
-    console.error(e)
+    console.error("Seed error:", e)
     process.exit(1)
   })
   .finally(async () => {

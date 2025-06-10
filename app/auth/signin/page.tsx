@@ -23,6 +23,8 @@ export default function SignIn() {
     setIsLoading(true)
     setError("")
 
+    console.log("Attempting login with:", username) // Debug log
+
     try {
       const result = await signIn("credentials", {
         username,
@@ -30,12 +32,17 @@ export default function SignIn() {
         redirect: false,
       })
 
+      console.log("Sign in result:", result) // Debug log
+
       if (result?.ok) {
+        console.log("Login successful, redirecting...")
         router.push("/dashboard")
       } else {
-        setError("Invalid username or password")
+        console.log("Login failed:", result?.error)
+        setError("Invalid username or password. Please check your credentials.")
       }
     } catch (error) {
+      console.error("Login error:", error)
       setError("Sign in failed. Please try again.")
     } finally {
       setIsLoading(false)
@@ -108,6 +115,17 @@ export default function SignIn() {
               )}
             </Button>
           </form>
+
+          {/* Debug info in development */}
+          {process.env.NODE_ENV === "development" && (
+            <div className="mt-4 p-3 bg-gray-100 rounded text-xs">
+              <p>
+                <strong>Debug Info:</strong>
+              </p>
+              <p>Try: admin / password</p>
+              <p>Or: user / password</p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
