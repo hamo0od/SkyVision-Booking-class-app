@@ -5,78 +5,91 @@ import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Menu, User, Settings, LogOut } from 'lucide-react'
 import { signOut } from 'next-auth/react'
-
-interface User {
-  id: string
-  name: string
-  email: string
-  role: string
-}
+import Link from 'next/link'
 
 interface MobileMenuProps {
-  user: User
+  user: {
+    name: string
+    email: string
+    role: string
+  }
 }
 
 export function MobileMenu({ user }: MobileMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
 
-  const handleLogout = async () => {
-    await signOut({
-      callbackUrl: `${window.location.origin}/auth/signin`
+  const handleLogout = () => {
+    const currentDomain = window.location.origin
+    signOut({ 
+      callbackUrl: `${currentDomain}/auth/signin`,
+      redirect: true 
     })
   }
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" className="md:hidden">
           <Menu className="h-4 w-4" />
         </Button>
       </SheetTrigger>
-      <SheetContent side="right" className="w-[300px]">
+      <SheetContent side="right" className="w-80">
         <div className="flex flex-col h-full">
-          <div className="flex items-center gap-3 pb-4 border-b">
-            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-              <User className="h-5 w-5 text-blue-600" />
-            </div>
-            <div>
-              <p className="font-medium">{user.name}</p>
-              <p className="text-sm text-gray-500">{user.email}</p>
-              <p className="text-xs text-blue-600">{user.role}</p>
+          {/* User Info */}
+          <div className="border-b pb-4 mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
+                <User className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <p className="font-semibold">{user.name}</p>
+                <p className="text-sm text-gray-600">{user.email}</p>
+                <p className="text-xs text-blue-600 font-medium">{user.role}</p>
+              </div>
             </div>
           </div>
 
-          <div className="flex-1 py-4">
-            <nav className="space-y-2">
-              {user.role === 'ADMIN' && (
-                <a
-                  href="/admin"
-                  className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
-                  onClick={() => setIsOpen(false)}
-                >
-                  <Settings className="h-4 w-4" />
-                  Admin Panel
-                </a>
-              )}
-              
-              {user.role === 'ADMIN' && (
-                <a
-                  href="/admin/profile"
-                  className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
-                  onClick={() => setIsOpen(false)}
-                >
-                  <User className="h-4 w-4" />
-                  Profile
-                </a>
-              )}
-            </nav>
+          {/* Navigation */}
+          <div className="flex-1 space-y-2">
+            <Link href="/dashboard">
+              <Button variant="ghost" className="w-full justify-start" onClick={() => setIsOpen(false)}>
+                Dashboard
+              </Button>
+            </Link>
+            
+            {user.role === 'ADMIN' && (
+              <>
+                <Link href="/admin">
+                  <Button variant="ghost" className="w-full justify-start" onClick={() => setIsOpen(false)}>
+                    Admin Panel
+                  </Button>
+                </Link>
+                <Link href="/admin/users">
+                  <Button variant="ghost" className="w-full justify-start" onClick={() => setIsOpen(false)}>
+                    Manage Users
+                  </Button>
+                </Link>
+                <Link href="/admin/classrooms">
+                  <Button variant="ghost" className="w-full justify-start" onClick={() => setIsOpen(false)}>
+                    Manage Classrooms
+                  </Button>
+                </Link>
+                <Link href="/admin/profile">
+                  <Button variant="ghost" className="w-full justify-start" onClick={() => setIsOpen(false)}>
+                    <Settings className="h-4 w-4 mr-2" />
+                    Profile Settings
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
 
+          {/* Logout */}
           <div className="border-t pt-4">
             <Button
-              variant="outline"
-              className="w-full justify-start"
               onClick={handleLogout}
+              variant="outline"
+              className="w-full justify-start text-red-600 border-red-200 hover:bg-red-50"
             >
               <LogOut className="h-4 w-4 mr-2" />
               Logout

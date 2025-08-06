@@ -1,20 +1,21 @@
 'use client'
 
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-import { Calendar, Clock, Users, UserCheck, FileText, CheckCircle, XCircle } from 'lucide-react'
-import { createBooking } from '@/app/actions/bookings'
+import { useState, useEffect } from 'react'
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
+import { MapPin, Clock, UserCheck, Users, BookOpen, FileText, Eye, EyeOff } from 'lucide-react'
 import { ModernDateTimePicker } from './modern-date-time-picker'
+import { createBooking } from '@/app/actions/bookings'
 
 interface Classroom {
   id: string
   name: string
   capacity: number
+  description?: string
 }
 
 interface BookingFormProps {
@@ -22,101 +23,140 @@ interface BookingFormProps {
 }
 
 export function BookingForm({ classrooms }: BookingFormProps) {
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+  const [selectedClassroom, setSelectedClassroom] = useState('')
   const [startDateTime, setStartDateTime] = useState('')
   const [endTime, setEndTime] = useState('')
-  const [ecaaApproval, setEcaaApproval] = useState<boolean | null>(null)
-  const [duration, setDuration] = useState<string>('')
+  const [courseTitle, setCourseTitle] = useState('')
+  const [instructorName, setInstructorName] = useState('')
+  const [participants, setParticipants] = useState('1')
+  const [ecaaApproval, setEcaaApproval] = useState('')
+  const [approvalNumber, setApprovalNumber] = useState('')
+  const [qualifications, setQualifications] = useState('')
+  const [trainingOrder, setTrainingOrder] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [message, setMessage] = useState('')
+  const [duration, setDuration] = useState('')
 
   // Calculate duration when times change
-  const calculateDuration = (start: string, end: string) => {
-    if (!start || !end) return ''
-    
-    const startDate = new Date(start)
-    const endDate = new Date(end)
-    
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return ''
-    
-    const diffMs = endDate.getTime() - startDate.getTime()
-    const diffMinutes = Math.floor(diffMs / (1000 * 60))
-    
-    if (diffMinutes <= 0) return 'Invalid time range'
-    
-    const hours = Math.floor(diffMinutes / 60)
-    const minutes = diffMinutes % 60
-    
-    let durationText = ''
-    if (hours > 0) durationText += `${hours}h `
-    if (minutes > 0) durationText += `${minutes}m`
-    
-    const isOverLimit = diffMinutes > 150 // 2.5 hours
-    return `${durationText.trim()} ${isOverLimit ? '(Exceeds 2.5h limit!)' : 'within 2.5h limit'}`
-  }
-
-  const handleStartTimeChange = (value: string) => {
-    setStartDateTime(value)
-    if (endTime) {
-      // Combine start date with end time
-      const startDate = new Date(value)
-      const [endHour, endMinute] = endTime.split(':')
-      const endDateTime = new Date(startDate)
-      endDateTime.setHours(parseInt(endHour), parseInt(endMinute), 0, 0)
-      
-      const endDateTimeString = endDateTime.toISOString().slice(0, 16)
-      setDuration(calculateDuration(value, endDateTimeString))
-    }
-  }
-
-  const handleEndTimeChange = (value: string) => {
-    setEndTime(value)
-    if (startDateTime) {
-      // Combine start date with end time
-      const startDate = new Date(startDateTime)
-      const [endHour, endMinute] = value.split(':')
-      const endDateTime = new Date(startDate)
-      endDateTime.setHours(parseInt(endHour), parseInt(endMinute), 0, 0)
-      
-      const endDateTimeString = endDateTime.toISOString().slice(0, 16)
-      setDuration(calculateDuration(startDateTime, endDateTimeString))
-    }
-  }
-
-  const handleSubmit = async (formData: FormData) => {
-    setIsSubmitting(true)
-    setMessage(null)
-
-    try {
-      // Combine start date with end time for the end datetime
-      if (startDateTime && endTime) {
+  useEffect(() => {
+    if (startDateTime && endTime) {
+      try {
         const startDate = new Date(startDateTime)
-        const [endHour, endMinute] = endTime.split(':')
-        const endDateTime = new Date(startDate)
-        endDateTime.setHours(parseInt(endHour), parseInt(endMinute), 0, 0)
-        
-        formData.set('endTime', endDateTime.toISOString())
-      }
+        const [hours, minutes] = endTime.split(':').map(Number)
+        const endDate = new Date(startDate)
+        endDate.setHours(hours, minutes, 0, 0)
 
-      const result = await createBooking(formData)
-      setMessage({ type: 'success', text: result.message })
-      
-      // Reset form
-      const form = document.getElementById('booking-form') as HTMLFormElement
-      if (form) {
-        form.reset()
-        setStartDateTime('')
-        setEndTime('')
-        setEcaaApproval(null)
+        if (endDate > startDate) {
+          const diffMs = endDate.getTime() - startDate.getTime()
+          const diffMinutes = Math.floor(diffMs / (1000 * 60))
+          const hours = Math.floor(diffMinutes / 60)
+          const mins = diffMinutes % 60
+          
+          const durationText = `${hours}h ${mins}m`
+          const isWithinLimit = diffMinutes <= 150 // 2.5 hours
+          
+          setDuration(isWithinLimit ? 
+            `${durationText} (within 2.5h limit)` : 
+            `${durationText} (exceeds 2.5h limit)`
+          )
+        } else {
+          setDuration('Invalid time range')
+        }
+      } catch (error) {
         setDuration('')
       }
+    } else {
+      setDuration('')
+    }
+  }, [startDateTime, endTime])
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+    setMessage('')
+
+    // Validate required fields
+    if (!selectedClassroom || !startDateTime || !endTime || !courseTitle || 
+        !instructorName || !participants || !ecaaApproval || !trainingOrder) {
+      setMessage('Please fill in all required fields.')
+      setIsSubmitting(false)
+      return
+    }
+
+    // Validate ECAA approval fields
+    if (ecaaApproval === 'yes' && !approvalNumber) {
+      setMessage('Please enter your ECAA approval number.')
+      setIsSubmitting(false)
+      return
+    }
+
+    if (ecaaApproval === 'no' && !qualifications) {
+      setMessage('Please enter your qualifications.')
+      setIsSubmitting(false)
+      return
+    }
+
+    // Validate duration
+    if (startDateTime && endTime) {
+      const startDate = new Date(startDateTime)
+      const [hours, minutes] = endTime.split(':').map(Number)
+      const endDate = new Date(startDate)
+      endDate.setHours(hours, minutes, 0, 0)
+
+      if (endDate <= startDate) {
+        setMessage('End time must be after start time.')
+        setIsSubmitting(false)
+        return
+      }
+
+      const diffMs = endDate.getTime() - startDate.getTime()
+      const diffMinutes = Math.floor(diffMs / (1000 * 60))
+      
+      if (diffMinutes > 150) { // 2.5 hours
+        setMessage('Session duration cannot exceed 2.5 hours.')
+        setIsSubmitting(false)
+        return
+      }
+    }
+
+    try {
+      const formData = new FormData()
+      formData.append('classroomId', selectedClassroom)
+      formData.append('startTime', startDateTime)
+      formData.append('endTime', endTime)
+      formData.append('courseTitle', courseTitle)
+      formData.append('instructorName', instructorName)
+      formData.append('participants', participants)
+      formData.append('ecaaApproval', ecaaApproval)
+      formData.append('approvalNumber', approvalNumber)
+      formData.append('qualifications', qualifications)
+      formData.append('trainingOrder', trainingOrder)
+
+      await createBooking(formData)
+      
+      // Reset form
+      setSelectedClassroom('')
+      setStartDateTime('')
+      setEndTime('')
+      setCourseTitle('')
+      setInstructorName('')
+      setParticipants('1')
+      setEcaaApproval('')
+      setApprovalNumber('')
+      setQualifications('')
+      setTrainingOrder('')
+      setMessage('Booking request submitted successfully!')
+      
       // Scroll to top
       window.scrollTo({ top: 0, behavior: 'smooth' })
+      
+      // Refresh page after short delay
+      setTimeout(() => {
+        window.location.reload()
+      }, 1500)
+      
     } catch (error) {
-      setMessage({
-        type: 'error',
-        text: error instanceof Error ? error.message : 'Failed to create booking'
-      })
+      setMessage('Failed to submit booking request. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
@@ -124,36 +164,28 @@ export function BookingForm({ classrooms }: BookingFormProps) {
 
   return (
     <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Calendar className="h-5 w-5 text-blue-600" />
-          Book a Classroom
-        </CardTitle>
+      <CardHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+        <CardTitle className="text-2xl font-bold">Book a Classroom</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-6 space-y-6">
         {message && (
-          <div className={`mb-6 p-4 rounded-lg flex items-center gap-2 ${
-            message.type === 'success' 
+          <div className={`p-4 rounded-lg ${
+            message.includes('successfully') 
               ? 'bg-green-50 text-green-800 border border-green-200' 
               : 'bg-red-50 text-red-800 border border-red-200'
           }`}>
-            {message.type === 'success' ? (
-              <CheckCircle className="h-5 w-5" />
-            ) : (
-              <XCircle className="h-5 w-5" />
-            )}
-            {message.text}
+            {message}
           </div>
         )}
 
-        <form id="booking-form" action={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
           {/* Classroom Selection */}
           <div className="space-y-2">
-            <Label htmlFor="classroomId" className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
+            <Label htmlFor="classroom" className="flex items-center gap-2 text-sm font-medium">
+              <MapPin className="h-4 w-4" />
               Classroom
             </Label>
-            <Select name="classroomId" required>
+            <Select value={selectedClassroom} onValueChange={setSelectedClassroom}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a classroom" />
               </SelectTrigger>
@@ -170,30 +202,29 @@ export function BookingForm({ classrooms }: BookingFormProps) {
           {/* Date and Time Selection */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
+              <Label className="flex items-center gap-2 text-sm font-medium">
+                <Clock className="h-4 w-4" />
                 Start Date & Time
               </Label>
               <ModernDateTimePicker
                 value={startDateTime}
-                onChange={handleStartTimeChange}
-                name="startTime"
-                required
+                onChange={setStartDateTime}
+                placeholder="Select start date and time"
               />
             </div>
 
             <div className="space-y-2">
-              <Label className="flex items-center gap-2">
+              <Label className="flex items-center gap-2 text-sm font-medium">
                 <Clock className="h-4 w-4" />
                 End Time (Same Day)
               </Label>
               <ModernDateTimePicker
                 value={endTime}
-                onChange={handleEndTimeChange}
+                onChange={setEndTime}
+                placeholder="Select end time"
                 timeOnly={true}
                 linkedDate={startDateTime}
                 disabled={!startDateTime}
-                required
               />
             </div>
           </div>
@@ -201,23 +232,24 @@ export function BookingForm({ classrooms }: BookingFormProps) {
           {/* Duration Display */}
           {duration && (
             <div className={`p-3 rounded-lg text-sm ${
-              duration.includes('Exceeds') 
-                ? 'bg-red-50 text-red-800 border border-red-200'
+              duration.includes('exceeds') 
+                ? 'bg-red-50 text-red-800 border border-red-200' 
                 : 'bg-blue-50 text-blue-800 border border-blue-200'
             }`}>
-              <strong>Duration:</strong> {duration}
+              Duration: {duration}
             </div>
           )}
 
           {/* Course Title */}
           <div className="space-y-2">
-            <Label htmlFor="purpose" className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
+            <Label htmlFor="courseTitle" className="flex items-center gap-2 text-sm font-medium">
+              <BookOpen className="h-4 w-4" />
               Course Title
             </Label>
             <Input
-              id="purpose"
-              name="purpose"
+              id="courseTitle"
+              value={courseTitle}
+              onChange={(e) => setCourseTitle(e.target.value)}
               placeholder="e.g., Private Pilot License Ground School, Instrument Rating Course..."
               required
             />
@@ -225,99 +257,107 @@ export function BookingForm({ classrooms }: BookingFormProps) {
 
           {/* Instructor Name */}
           <div className="space-y-2">
-            <Label htmlFor="instructorName" className="flex items-center gap-2">
+            <Label htmlFor="instructorName" className="flex items-center gap-2 text-sm font-medium">
               <UserCheck className="h-4 w-4" />
               Instructor Name
             </Label>
             <Input
               id="instructorName"
-              name="instructorName"
-              placeholder="Enter instructor's full name"
-              required
-            />
-          </div>
-
-          {/* Training Order */}
-          <div className="space-y-2">
-            <Label htmlFor="trainingOrder" className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              Training Order
-            </Label>
-            <Input
-              id="trainingOrder"
-              name="trainingOrder"
-              placeholder="Enter training order number"
+              value={instructorName}
+              onChange={(e) => setInstructorName(e.target.value)}
+              placeholder="Enter the instructor's full name"
               required
             />
           </div>
 
           {/* Number of Participants */}
           <div className="space-y-2">
-            <Label htmlFor="participants" className="flex items-center gap-2">
+            <Label htmlFor="participants" className="flex items-center gap-2 text-sm font-medium">
               <Users className="h-4 w-4" />
               Number of Participants
             </Label>
             <Input
               id="participants"
-              name="participants"
               type="number"
               min="1"
               max="50"
-              placeholder="Enter number of participants"
+              value={participants}
+              onChange={(e) => setParticipants(e.target.value)}
+              required
+            />
+          </div>
+
+          {/* Training Order */}
+          <div className="space-y-2">
+            <Label htmlFor="trainingOrder" className="flex items-center gap-2 text-sm font-medium">
+              <FileText className="h-4 w-4" />
+              Training Order
+            </Label>
+            <Input
+              id="trainingOrder"
+              value={trainingOrder}
+              onChange={(e) => setTrainingOrder(e.target.value)}
+              placeholder="Enter training order number"
               required
             />
           </div>
 
           {/* ECAA Approval */}
           <div className="space-y-4">
-            <Label className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4" />
+            <Label className="flex items-center gap-2 text-sm font-medium">
+              <UserCheck className="h-4 w-4" />
               ECAA Approval Status
             </Label>
             <div className="flex gap-4">
-              <label className="flex items-center space-x-2 cursor-pointer">
+              <label className="flex items-center gap-2">
                 <input
                   type="radio"
                   name="ecaaApproval"
-                  value="true"
-                  onChange={() => setEcaaApproval(true)}
+                  value="yes"
+                  checked={ecaaApproval === 'yes'}
+                  onChange={(e) => setEcaaApproval(e.target.value)}
                   className="text-blue-600"
-                  required
                 />
                 <span>Yes, I have ECAA approval</span>
               </label>
-              <label className="flex items-center space-x-2 cursor-pointer">
+              <label className="flex items-center gap-2">
                 <input
                   type="radio"
                   name="ecaaApproval"
-                  value="false"
-                  onChange={() => setEcaaApproval(false)}
+                  value="no"
+                  checked={ecaaApproval === 'no'}
+                  onChange={(e) => setEcaaApproval(e.target.value)}
                   className="text-blue-600"
-                  required
                 />
                 <span>No, I don't have ECAA approval</span>
               </label>
             </div>
 
             {/* Conditional Fields */}
-            {ecaaApproval === true && (
+            {ecaaApproval === 'yes' && (
               <div className="space-y-2">
-                <Label htmlFor="approvalNumber">ECAA Approval Number</Label>
+                <Label htmlFor="approvalNumber" className="text-sm font-medium">
+                  ECAA Approval Number
+                </Label>
                 <Input
                   id="approvalNumber"
-                  name="approvalNumber"
+                  value={approvalNumber}
+                  onChange={(e) => setApprovalNumber(e.target.value)}
                   placeholder="Enter your ECAA approval number"
                   required
                 />
               </div>
             )}
 
-            {ecaaApproval === false && (
+            {ecaaApproval === 'no' && (
               <div className="space-y-2">
-                <Label htmlFor="qualifications">Your Qualifications</Label>
+                <Label htmlFor="qualifications" className="text-sm font-medium">
+                  Your Qualifications
+                </Label>
                 <Textarea
                   id="qualifications"
-                  name="qualifications"
+                  value={qualifications}
+                  onChange={(e) => setQualifications(e.target.value)}
                   placeholder="Please describe your relevant qualifications and experience..."
                   rows={3}
                   required
@@ -326,20 +366,12 @@ export function BookingForm({ classrooms }: BookingFormProps) {
             )}
           </div>
 
-          {/* Submit Button */}
-          <Button
-            type="submit"
-            disabled={isSubmitting || (duration && duration.includes('Exceeds'))}
-            className="w-full"
+          <Button 
+            type="submit" 
+            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+            disabled={isSubmitting}
           >
-            {isSubmitting ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Creating Booking...
-              </>
-            ) : (
-              'Create Booking Request'
-            )}
+            {isSubmitting ? 'Submitting...' : 'Submit Booking Request'}
           </Button>
         </form>
       </CardContent>
