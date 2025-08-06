@@ -208,7 +208,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               </Label>
               <ModernDateTimePicker
                 value={startDateTime}
-                onChange={setStartDateTime}
+                onChange={handleStartTimeChange}
                 placeholder="Select start date and time"
               />
             </div>
@@ -220,7 +220,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               </Label>
               <ModernDateTimePicker
                 value={endTime}
-                onChange={setEndTime}
+                onChange={handleEndTimeChange}
                 placeholder="Select end time"
                 timeOnly={true}
                 linkedDate={startDateTime}
@@ -309,7 +309,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               ECAA Approval Status
             </Label>
             <div className="flex gap-4">
-              <label className="flex items-center gap-2">
+              <label className="flex items-center space-x-2 cursor-pointer">
                 <input
                   type="radio"
                   name="ecaaApproval"
@@ -320,7 +320,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
                 />
                 <span>Yes, I have ECAA approval</span>
               </label>
-              <label className="flex items-center gap-2">
+              <label className="flex items-center space-x-2 cursor-pointer">
                 <input
                   type="radio"
                   name="ecaaApproval"

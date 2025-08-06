@@ -1,232 +1,156 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ChevronLeft, ChevronRight, Calendar, MapPin } from 'lucide-react'
+import { useEffect, useState } from "react";
+import { Calendar, Users, Clock, BookOpen } from 'lucide-react';
 
 interface Booking {
-  id: string
-  startTime: string
-  endTime: string
+  id: string;
+  startTime: string;
+  endTime: string;
+  purpose: string;
+  instructorName: string;
+  trainingOrder: string;
+  participants: number;
+  ecaaApproval: boolean;
+  approvalNumber?: string;
+  qualifications?: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  classroom: {
+    id: string;
+    name: string;
+    capacity: number;
+  };
   user: {
-    name: string
-  }
-  courseTitle: string
-  status: 'PENDING' | 'APPROVED' | 'REJECTED'
-}
-
-interface Classroom {
-  id: string
-  name: string
-  capacity: number
+    name: string;
+  };
 }
 
 interface BookingTimelineProps {
-  classrooms: Classroom[]
-  bookings: Booking[]
+  bookings: Booking[];
+  classrooms: { id: string; name: string; capacity: number }[];
 }
 
-export function BookingTimeline({ classrooms, bookings }: BookingTimelineProps) {
-  const [selectedDate, setSelectedDate] = useState(new Date())
+export function BookingTimeline({ bookings, classrooms }: BookingTimelineProps) {
+  const [timelineData, setTimelineData] = useState<{
+    time: string;
+    classrooms: {
+      [classroomId: string]: {
+        status: "AVAILABLE" | "PENDING" | "APPROVED";
+        booking?: Booking;
+      };
+    };
+  }[]>([]);
+  const [currentDate, setCurrentDate] = useState(new Date());
 
-  const formatDate = (date: Date) => {
-    return date.toISOString().split('T')[0]
-  }
+  useEffect(() => {
+    const generateTimeline = () => {
+      const timeline = [];
+      const startTime = 8; // 8:00 AM
+      const endTime = 18; // 6:00 PM
 
-  const navigateDate = (direction: 'prev' | 'next') => {
-    const newDate = new Date(selectedDate)
-    if (direction === 'prev') {
-      newDate.setDate(newDate.getDate() - 1)
-    } else {
-      newDate.setDate(newDate.getDate() + 1)
-    }
-    setSelectedDate(newDate)
-  }
+      for (let hour = startTime; hour < endTime; hour++) {
+        for (let minute = 0; minute < 60; minute += 30) {
+          const timeString = `${hour.toString().padStart(2, "0")}:${minute
+            .toString()
+            .padStart(2, "0")}`;
+          const classroomsData: {
+            [classroomId: string]: {
+              status: "AVAILABLE" | "PENDING" | "APPROVED";
+              booking?: Booking;
+            };
+          } = {};
 
-  const generateTimeSlots = () => {
-    const slots = []
-    for (let hour = 8; hour <= 17; hour++) {
-      for (let minute = 0; minute < 60; minute += 30) {
-        if (hour === 17 && minute > 0) break // Stop at 5:00 PM
-        
-        const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
-        const displayTime = new Date(2000, 0, 1, hour, minute).toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true
-        })
-        
-        slots.push({ value: timeString, display: displayTime })
+          classrooms.forEach((classroom) => {
+            classroomsData[classroom.id] = { status: "AVAILABLE" };
+          });
+
+          timeline.push({ time: timeString, classrooms: classroomsData });
+        }
       }
-    }
-    return slots
-  }
 
-  const getBookingForSlot = (classroomId: string, timeSlot: string) => {
-    const selectedDateStr = formatDate(selectedDate)
-    
-    return bookings.find(booking => {
-      const bookingDate = booking.startTime.split('T')[0]
-      if (bookingDate !== selectedDateStr) return false
-      
-      const bookingStart = new Date(booking.startTime)
-      const bookingEnd = new Date(booking.endTime)
-      const slotTime = new Date(`${selectedDateStr}T${timeSlot}:00`)
-      
-      return slotTime >= bookingStart && slotTime < bookingEnd
-    })
-  }
+      // Populate bookings
+      bookings.forEach((booking) => {
+        const bookingStartTime = new Date(booking.startTime);
+        const bookingEndTime = new Date(booking.endTime);
 
-  const isBookingStart = (booking: Booking, timeSlot: string) => {
-    const bookingStart = new Date(booking.startTime)
-    const slotTime = new Date(`${formatDate(selectedDate)}T${timeSlot}:00`)
-    
-    return Math.abs(bookingStart.getTime() - slotTime.getTime()) < 30 * 60 * 1000 // Within 30 minutes
-  }
+        const bookingStartHour = bookingStartTime.getHours();
+        const bookingStartMinute = bookingStartTime.getMinutes();
+        const bookingEndHour = bookingEndTime.getHours();
+        const bookingEndMinute = bookingEndTime.getMinutes();
 
-  const getSlotStatus = (classroomId: string, timeSlot: string) => {
-    const booking = getBookingForSlot(classroomId, timeSlot)
-    
-    if (!booking) {
-      return { status: 'available', booking: null }
-    }
-    
-    return { status: booking.status.toLowerCase(), booking }
-  }
+        const bookingStartTimeString = `${bookingStartHour
+          .toString()
+          .padStart(2, "0")}:${bookingStartMinute.toString().padStart(2, "0")}`;
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'available':
-        return 'bg-green-100 text-green-800 border-green-200'
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-      case 'approved':
-        return 'bg-blue-100 text-blue-800 border-blue-200'
-      case 'rejected':
-        return 'bg-red-100 text-red-800 border-red-200'
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200'
-    }
-  }
+        timeline.forEach((slot) => {
+          if (slot.time === bookingStartTimeString) {
+            slot.classrooms[booking.classroom.id] = {
+              status: booking.status,
+              booking: booking,
+            };
+          }
+        });
+      });
 
-  const timeSlots = generateTimeSlots()
+      setTimelineData(timeline);
+    };
+
+    generateTimeline();
+  }, [bookings, classrooms]);
+
+  const formatTime = (timeString: string) => {
+    const [hour, minute] = timeString.split(":");
+    const hourNum = parseInt(hour);
+    const ampm = hourNum >= 12 ? "PM" : "AM";
+    const displayHour = hourNum > 12 ? hourNum - 12 : hourNum === 0 ? 12 : hourNum;
+    return `${displayHour}:${minute} ${ampm}`;
+  };
 
   return (
-    <Card className="w-full">
-      <CardHeader className="bg-gradient-to-r from-green-600 to-blue-600 text-white">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-2xl font-bold flex items-center gap-2">
-            <Calendar className="h-6 w-6" />
-            Daily Schedule
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigateDate('prev')}
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="font-semibold px-4">
-              {selectedDate.toLocaleDateString('en-US', { 
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              })}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigateDate('next')}
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+    <div className="overflow-x-auto">
+      <div className="grid grid-cols-[60px_repeat(auto-fit,minmax(120px,1fr))] auto-rows-[60px] border">
+        {/* Header Row */}
+        <div className="p-2 font-semibold border-b border-r flex items-center justify-center">
+          Time
         </div>
-      </CardHeader>
-      <CardContent className="p-6">
-        {/* Legend */}
-        <div className="flex flex-wrap gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-green-100 border border-green-200 rounded"></div>
-            <span className="text-sm">Available</span>
+        {classrooms.map((classroom) => (
+          <div
+            key={classroom.id}
+            className="p-2 font-semibold border-b border-r flex items-center justify-center"
+          >
+            {classroom.name}
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-yellow-100 border border-yellow-200 rounded"></div>
-            <span className="text-sm">Pending</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-blue-100 border border-blue-200 rounded"></div>
-            <span className="text-sm">Approved</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-red-100 border border-red-200 rounded"></div>
-            <span className="text-sm">Rejected</span>
-          </div>
-        </div>
+        ))}
 
-        {/* Timeline Grid */}
-        <div className="overflow-x-auto">
-          <div className="min-w-full">
-            {/* Header */}
-            <div className="grid grid-cols-[120px_repeat(auto-fit,minmax(150px,1fr))] gap-2 mb-4">
-              <div className="font-semibold text-gray-600 p-2">Time</div>
-              {classrooms.map(classroom => (
-                <div key={classroom.id} className="text-center">
-                  <div className="font-semibold text-gray-800 flex items-center justify-center gap-1">
-                    <MapPin className="h-4 w-4" />
-                    {classroom.name}
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    Capacity: {classroom.capacity}
-                  </div>
-                </div>
-              ))}
+        {/* Timeline Rows */}
+        {timelineData.map((slot) => (
+          <React.Fragment key={slot.time}>
+            <div className="p-2 font-medium border-b border-r flex items-center justify-center">
+              {formatTime(slot.time)}
             </div>
+            {classrooms.map((classroom) => {
+              const cellData = slot.classrooms[classroom.id];
+              let cellClass = "p-2 border-b border-r flex items-center justify-center";
 
-            {/* Time Slots */}
-            <div className="space-y-1">
-              {timeSlots.map(slot => (
-                <div key={slot.value} className="grid grid-cols-[120px_repeat(auto-fit,minmax(150px,1fr))] gap-2">
-                  <div className="p-2 text-sm font-medium text-gray-600 border-r">
-                    {slot.display}
-                  </div>
-                  {classrooms.map(classroom => {
-                    const { status, booking } = getSlotStatus(classroom.id, slot.value)
-                    const isStart = booking && isBookingStart(booking, slot.value)
-                    
-                    return (
-                      <div
-                        key={`${classroom.id}-${slot.value}`}
-                        className={`p-2 text-xs border rounded ${getStatusColor(status)} min-h-[40px] flex items-center justify-center`}
-                      >
-                        {booking ? (
-                          isStart ? (
-                            <div className="text-center">
-                              <div className="font-medium">{booking.user.name}</div>
-                              <div className="truncate">{booking.courseTitle}</div>
-                            </div>
-                          ) : (
-                            <div className="text-center opacity-60">
-                              •••
-                            </div>
-                          )
-                        ) : (
-                          <span className="text-center">Available</span>
-                        )}
-                      </div>
-                    )
-                  })}
+              if (cellData.status === "APPROVED") {
+                cellClass += " bg-green-100 text-green-800";
+              } else if (cellData.status === "PENDING") {
+                cellClass += " bg-yellow-100 text-yellow-800";
+              }
+
+              return (
+                <div key={classroom.id} className={cellClass}>
+                  {cellData.booking ? (
+                    <div className="text-sm">
+                      {cellData.booking.user.name}
+                    </div>
+                  ) : null}
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
+              );
+            })}
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
+  );
 }
