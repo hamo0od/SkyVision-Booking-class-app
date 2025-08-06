@@ -89,6 +89,7 @@
 
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -103,4 +104,10 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgb(156 163 175);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(209 213 219) rgb(243 244 246);
 }

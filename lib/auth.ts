@@ -74,7 +74,7 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (token) {
-        session.user.id = token.sub
+        session.user.id = token.sub!
         session.user.role = token.role as string
         session.user.username = token.username as string
       }
@@ -82,20 +82,20 @@ export const authOptions: NextAuthOptions = {
     },
     async redirect({ url, baseUrl }) {
       // Handle production vs development URLs
-      const currentDomain = process.env.NEXTAUTH_URL || baseUrl
+      const productionUrl = process.env.NEXTAUTH_URL || baseUrl
       
-      // If it's a relative URL, use the current domain
+      // If it's a relative URL, make it absolute
       if (url.startsWith('/')) {
-        return `${currentDomain}${url}`
+        return `${productionUrl}${url}`
       }
       
-      // If it's the same domain, allow it
-      if (url.startsWith(currentDomain)) {
+      // If it's the same origin, allow it
+      if (new URL(url).origin === new URL(productionUrl).origin) {
         return url
       }
       
-      // Default to dashboard
-      return `${currentDomain}/dashboard`
+      // Default to base URL
+      return `${productionUrl}/auth/signin`
     }
   },
   pages: {

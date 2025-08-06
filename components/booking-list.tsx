@@ -20,7 +20,6 @@ interface Booking {
   qualifications?: string
   status: 'PENDING' | 'APPROVED' | 'REJECTED'
   classroom: {
-    id: string
     name: string
     capacity: number
   }
@@ -45,6 +44,7 @@ export function BookingList({ bookings }: BookingListProps) {
     try {
       const result = await cancelBooking(bookingId)
       setMessage({ type: 'success', text: result.message })
+      // The page will refresh automatically due to revalidatePath
     } catch (error) {
       setMessage({ 
         type: 'error', 
@@ -85,26 +85,29 @@ export function BookingList({ bookings }: BookingListProps) {
     }
   }
 
-  const canCancel = (booking: Booking) => {
+  const canCancelBooking = (booking: Booking) => {
     return (booking.status === 'PENDING' || booking.status === 'APPROVED') && 
            new Date(booking.startTime) > new Date()
   }
 
   if (bookings.length === 0) {
     return (
-      <Card>
-        <CardContent className="p-6 text-center text-gray-500">
-          <Calendar className="mx-auto h-12 w-12 mb-4 text-gray-300" />
-          <p>No bookings found. Create your first booking above!</p>
+      <Card className="w-full">
+        <CardContent className="flex flex-col items-center justify-center py-12">
+          <Calendar className="h-12 w-12 text-gray-400 mb-4" />
+          <p className="text-gray-500 text-center">No bookings found</p>
+          <p className="text-sm text-gray-400 text-center mt-2">
+            Create your first booking using the form above
+          </p>
         </CardContent>
       </Card>
     )
   }
 
   return (
-    <div className="space-y-4">
+    <div className="w-full">
       {message && (
-        <div className={`p-4 rounded-lg ${
+        <div className={`mb-4 p-4 rounded-lg ${
           message.type === 'success' 
             ? 'bg-green-50 text-green-800 border border-green-200' 
             : 'bg-red-50 text-red-800 border border-red-200'
@@ -113,94 +116,105 @@ export function BookingList({ bookings }: BookingListProps) {
         </div>
       )}
       
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">My Bookings</h3>
-        {bookings.length > 3 && (
-          <Badge variant="secondary" className="text-xs">
-            {bookings.length} total
-          </Badge>
-        )}
-      </div>
-
       <div className="max-h-96 overflow-y-auto pr-2 space-y-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400">
         {bookings.map((booking) => (
-          <Card key={booking.id} className="hover:shadow-md transition-shadow">
+          <Card key={booking.id} className="w-full hover:shadow-md transition-shadow duration-200">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg font-semibold text-gray-900">
                   {booking.classroom.name}
                 </CardTitle>
-                <Badge className={getStatusColor(booking.status)}>
-                  {booking.status}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge className={`${getStatusColor(booking.status)} font-medium`}>
+                    {booking.status}
+                  </Badge>
+                  {canCancelBooking(booking) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleCancel(booking.id)}
+                      disabled={cancellingId === booking.id}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                    >
+                      {cancellingId === booking.id ? (
+                        <>
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600 mr-1"></div>
+                          Cancelling...
+                        </>
+                      ) : (
+                        <>
+                          <X className="h-3 w-3 mr-1" />
+                          Cancel
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                <div className="flex items-center text-gray-600">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="flex items-center text-sm text-gray-600">
                   <Calendar className="h-4 w-4 mr-2 text-blue-500" />
-                  <span>{formatDate(booking.startTime)}</span>
+                  <span className="font-medium">{formatDate(booking.startTime)}</span>
                 </div>
-                <div className="flex items-center text-gray-600">
+                <div className="flex items-center text-sm text-gray-600">
                   <Clock className="h-4 w-4 mr-2 text-green-500" />
                   <span>{formatTime(booking.startTime)} - {formatTime(booking.endTime)}</span>
                 </div>
-                <div className="flex items-center text-gray-600">
-                  <MapPin className="h-4 w-4 mr-2 text-red-500" />
+                <div className="flex items-center text-sm text-gray-600">
+                  <MapPin className="h-4 w-4 mr-2 text-purple-500" />
                   <span>Capacity: {booking.classroom.capacity}</span>
                 </div>
-                <div className="flex items-center text-gray-600">
-                  <Users className="h-4 w-4 mr-2 text-purple-500" />
+                <div className="flex items-center text-sm text-gray-600">
+                  <Users className="h-4 w-4 mr-2 text-orange-500" />
                   <span>{booking.participants} participants</span>
                 </div>
               </div>
               
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center text-gray-600">
-                  <BookOpen className="h-4 w-4 mr-2 text-indigo-500" />
-                  <span className="font-medium">Course:</span>
-                  <span className="ml-1">{booking.purpose}</span>
+              <div className="space-y-2">
+                <div className="flex items-start text-sm text-gray-600">
+                  <BookOpen className="h-4 w-4 mr-2 text-indigo-500 mt-0.5" />
+                  <div>
+                    <span className="font-medium">Course: </span>
+                    <span>{booking.purpose}</span>
+                  </div>
                 </div>
-                <div className="flex items-center text-gray-600">
-                  <UserCheck className="h-4 w-4 mr-2 text-orange-500" />
-                  <span className="font-medium">Instructor:</span>
+                
+                <div className="flex items-center text-sm text-gray-600">
+                  <UserCheck className="h-4 w-4 mr-2 text-teal-500" />
+                  <span className="font-medium">Instructor: </span>
                   <span className="ml-1">{booking.instructorName}</span>
                 </div>
-              </div>
-
-              {canCancel(booking) && (
-                <div className="pt-3 border-t">
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => handleCancel(booking.id)}
-                    disabled={cancellingId === booking.id}
-                    className="w-full sm:w-auto"
-                  >
-                    {cancellingId === booking.id ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Cancelling...
-                      </>
-                    ) : (
-                      <>
-                        <X className="h-4 w-4 mr-2" />
-                        Cancel Booking
-                      </>
-                    )}
-                  </Button>
+                
+                <div className="text-sm text-gray-600">
+                  <span className="font-medium">Training Order: </span>
+                  <span>{booking.trainingOrder}</span>
                 </div>
-              )}
+                
+                <div className="text-sm text-gray-600">
+                  <span className="font-medium">ECAA Approval: </span>
+                  {booking.ecaaApproval ? (
+                    <span className="text-green-600">
+                      Yes - {booking.approvalNumber}
+                    </span>
+                  ) : (
+                    <span className="text-blue-600">
+                      No - {booking.qualifications}
+                    </span>
+                  )}
+                </div>
+              </div>
             </CardContent>
           </Card>
         ))}
-        
-        {bookings.length > 3 && (
-          <div className="text-center text-sm text-gray-500 py-2">
-            Scroll to see all bookings
-          </div>
-        )}
       </div>
+      
+      {bookings.length > 3 && (
+        <div className="text-center mt-2 text-sm text-gray-500">
+          Scroll to see all {bookings.length} bookings
+        </div>
+      )}
     </div>
   )
 }
