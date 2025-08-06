@@ -162,6 +162,14 @@ export function BookingForm({ classrooms }: BookingFormProps) {
     }
   }
 
+  const handleStartTimeChange = (newDateTime: string) => {
+    setStartDateTime(newDateTime);
+  };
+
+  const handleEndTimeChange = (newTime: string) => {
+    setEndTime(newTime);
+  };
+
   return (
     <Card className="w-full">
       <CardHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
@@ -208,7 +216,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               </Label>
               <ModernDateTimePicker
                 value={startDateTime}
-                onChange={handleStartTimeChange}
+                onChange={setStartDateTime}
                 placeholder="Select start date and time"
               />
             </div>
@@ -220,7 +228,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               </Label>
               <ModernDateTimePicker
                 value={endTime}
-                onChange={handleEndTimeChange}
+                onChange={setEndTime}
                 placeholder="Select end time"
                 timeOnly={true}
                 linkedDate={startDateTime}
