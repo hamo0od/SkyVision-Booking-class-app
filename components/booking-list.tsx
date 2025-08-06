@@ -62,16 +62,20 @@ export function BookingList({ bookings }: BookingListProps) {
           id: bookingId,
         })
 
-        // Clear message after 3 seconds
+        // Clear message after 3 seconds and refresh
         setTimeout(() => {
           setMessage(null)
-        }, 3000)
+          window.location.reload()
+        }, 2000)
       } catch (error) {
         setMessage({
           type: "error",
           text: error instanceof Error ? error.message : "Failed to cancel booking",
           id: bookingId,
         })
+        setTimeout(() => {
+          setMessage(null)
+        }, 3000)
       } finally {
         setIsLoading(null)
       }
