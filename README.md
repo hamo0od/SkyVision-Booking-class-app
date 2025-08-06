@@ -1,30 +1,97 @@
-# Class Room Booking App
+# Material Management System - Frontend
 
-*Automatically synced with your [v0.dev](https://v0.dev) deployments*
+A modern React/Next.js frontend for airline material and tool management.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/sky-vision/v0-class-room-booking-app)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.dev-black?style=for-the-badge)](https://v0.dev/chat/projects/wiEIcsqAZta)
+## Features
 
-## Overview
+- **User Authentication** - Role-based access control
+- **Material Management** - Track consumable materials and inventory
+- **Tool Management** - Manage returnable tools and equipment (no calibration tracking)
+- **Request System** - Submit and approve material/tool requests
+- **Dashboard** - Overview of system status and metrics
+- **Responsive Design** - Works on desktop and mobile devices
 
-This repository will stay in sync with your deployed chats on [v0.dev](https://v0.dev).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.dev](https://v0.dev).
+## Tech Stack
 
-## Deployment
+- **Frontend**: Next.js 15, React 19, TypeScript
+- **Styling**: Tailwind CSS, Radix UI components
+- **State Management**: React Context API
+- **API Communication**: Fetch API with custom service layer
 
-Your project is live at:
+## Getting Started
 
-**[https://vercel.com/sky-vision/v0-class-room-booking-app](https://vercel.com/sky-vision/v0-class-room-booking-app)**
+### Prerequisites
 
-## Build your app
+- Node.js 18+ 
+- Your backend API running on `http://localhost:5000`
 
-Continue building your app on:
+### Installation
 
-**[https://v0.dev/chat/projects/wiEIcsqAZta](https://v0.dev/chat/projects/wiEIcsqAZta)**
+1. Clone the repository
+2. Install dependencies:
+   \`\`\`bash
+   npm install
+   \`\`\`
 
-## How It Works
+3. Set up environment variables:
+   \`\`\`bash
+   cp .env.example .env.local
+   \`\`\`
+   Update the API URL if needed.
 
-1. Create and modify your project using [v0.dev](https://v0.dev)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+4. Start the development server:
+   \`\`\`bash
+   npm run dev
+   \`\`\`
+
+5. Open [http://localhost:3000](http://localhost:3000) in your browser
+
+## API Integration
+
+The frontend communicates with your backend API through the service layer in `lib/api.ts`. 
+
+### Expected API Endpoints
+
+Your backend should implement these endpoints:
+
+- `POST /api/auth/login` - User authentication
+- `GET /api/auth/me` - Get current user
+- `GET /api/materials` - Get all materials
+- `GET /api/tools` - Get all tools
+- `POST /api/tools/:id/checkout` - Check out a tool
+- `POST /api/tools/:id/checkin` - Check in a tool
+- `GET /api/categories` - Get categories
+- `GET /api/locations` - Get locations
+- `GET /api/requests` - Get material requests
+- And more...
+
+## User Roles
+
+- **Admin**: Full access to all features
+- **Storekeeper**: Manage inventory, approve requests
+- **Technician**: Submit requests, check out tools
+
+## Development
+
+\`\`\`bash
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Start production server
+npm start
+
+# Run linting
+npm run lint
+\`\`\`
+
+## Project Structure
+
+\`\`\`
+├── app/                 # Next.js app directory
+├── components/          # Reusable UI components
+├── lib/                # Utilities and API services
+├── public/             # Static assets
+└── styles/             # Global styles

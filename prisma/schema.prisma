@@ -1,3 +1,6 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,58 +10,338 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  username  String   @unique
-  password  String?
-  name      String?
-  role      Role     @default(USER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  bookings  Booking[]
-}
-
-model Classroom {
-  id          String    @id @default(cuid())
-  name        String    @unique
-  capacity    Int
-  description String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  bookings    Booking[]
-}
-
-model Booking {
-  id              String        @id @default(cuid())
-  userId          String
-  classroomId     String
-  startTime       DateTime
-  endTime         DateTime
-  purpose         String
-  status          BookingStatus @default(PENDING)
-  participants    Int           @default(1)
-  instructorName  String
-  trainingOrder   String
-  ecaaApproval    Boolean       @default(false)
-  approvalNumber  String?
-  qualifications  String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  
-  user            User          @relation(fields: [userId], references: [id])
-  classroom       Classroom     @relation(fields: [classroomId], references: [id])
-  
-  @@unique([classroomId, startTime, endTime])
-}
-
-enum Role {
-  USER
+enum UserRole {
   ADMIN
+  STOREKEEPER
+  TECHNICIAN
 }
 
-enum BookingStatus {
+enum MaterialStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+}
+
+enum ToolStatus {
+  AVAILABLE
+  CHECKED_OUT
+  OVERDUE
+  PENDING_RETURN
+  MAINTENANCE
+  CALIBRATION
+  RETIRED
+}
+
+enum CheckoutStatus {
+  PENDING
+  CHECKED_OUT
+  OVERDUE
+  PENDING_RETURN
+  RETURNED
+  LOST
+  DAMAGED
+}
+
+enum CheckoutPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum CategoryType {
+  GENERAL
+  MATERIAL
+  TOOL
+  CONSUMABLE
+}
+
+enum LocationType {
+  WAREHOUSE
+  TOOL_CRIB
+  MAINTENANCE_AREA
+  LINE_STATION
+}
+
+enum RequestPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum RequestStatus {
   PENDING
   APPROVED
+  ISSUED
+  COMPLETED
   REJECTED
+}
+
+enum MovementType {
+  ISSUE
+  RETURN
+  PURCHASE
+  ADJUSTMENT
+  CHECKOUT
+  CHECKIN
+}
+
+// User model
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  name          String
+  password      String
+  role          UserRole
+  department    String?
+  employeeId    String    @unique
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  materialRequests MaterialRequest[] @relation("requester")
+  approvedRequests MaterialRequest[] @relation("approver")
+  issuedRequests   MaterialRequest[] @relation("issuer")
+  stockMovements   StockMovement[]
+  materials        Material[]        @relation("createdBy")
+  updatedMaterials Material[]        @relation("updatedBy")
+  tools            Tool[]            @relation("createdBy")
+  updatedTools     Tool[]            @relation("updatedBy")
+  checkouts        ItemCheckout[]    @relation("checkoutUser")
+  issuedCheckouts  ItemCheckout[]    @relation("issuedBy")
+  returnedCheckouts ItemCheckout[]   @relation("returnedBy")
+  notifications    Notification[]
+}
+
+// Material model (for consumable/non-returnable items)
+model Material {
+  id                   String    @id @default(uuid())
+  partNumber           String    @unique
+  serialNumber         String?
+  name                 String
+  description          String?
+  categoryId           String
+  locationId           String
+  stockQty             Int       @default(0)
+  unit                 String
+  minimumLevel         Int       @default(0)
+  status               MaterialStatus @default(ACTIVE)
+  isConsumable         Boolean   @default(true)
+  lastUpdated          DateTime  @updatedAt
+  createdAt            DateTime  @default(now())
+  createdById          String
+  updatedById          String
+
+  // Relations
+  category             Category  @relation(fields: [categoryId], references: [id])
+  location             Location  @relation(fields: [locationId], references: [id])
+  createdBy            User      @relation("createdBy", fields: [createdById], references: [id])
+  updatedBy            User      @relation("updatedBy", fields: [updatedById], references: [id])
+  aircraftTypes        AircraftType[]
+  materialRequests     MaterialRequest[]
+  stockMovements       StockMovement[]
+  checkouts            ItemCheckout[] @relation("materialCheckouts")
+
+  @@index([stockQty])
+}
+
+// Tool model (for returnable items)
+model Tool {
+  id                 String         @id @default(uuid())
+  partNumber         String         @unique
+  serialNumber       String         @unique
+  name               String
+  description        String?
+  categoryId         String
+  locationId         String
+  status             ToolStatus     @default(AVAILABLE)
+  maxCheckoutDays    Int            @default(7)
+  requiresCalibration Boolean       @default(false)
+  lastMaintenanceDate DateTime?
+  nextMaintenanceDate DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  createdById        String
+  updatedById        String
+
+  // Relations
+  category           Category       @relation(fields: [categoryId], references: [id])
+  location           Location       @relation(fields: [locationId], references: [id])
+  createdBy          User           @relation("createdBy", fields: [createdById], references: [id])
+  updatedBy          User           @relation("updatedBy", fields: [updatedById], references: [id])
+  aircraftTypes      AircraftType[]
+  checkouts          ItemCheckout[] @relation("toolCheckouts")
+  toolRequests       MaterialRequest[] @relation("toolRequests")
+
+  @@index([status])
+}
+
+// Universal checkout system for both materials and tools
+model ItemCheckout {
+  id              String         @id @default(uuid())
+  checkoutNumber  String         @unique
+
+  // Item being checked out (either material or tool)
+  material        Material?      @relation("materialCheckouts", fields: [materialId], references: [id])
+  materialId      String?
+  tool            Tool?          @relation("toolCheckouts", fields: [toolId], references: [id])
+  toolId          String?
+
+  // Checkout details
+  user            User           @relation("checkoutUser", fields: [userId], references: [id])
+  userId          String
+  quantity        Int            @default(1)
+  purpose         String
+  checkoutDate    DateTime       @default(now())
+  expectedReturnDate DateTime?
+  actualReturnDate DateTime?
+
+  // Status and workflow
+  status          CheckoutStatus @default(CHECKED_OUT)
+  priority        CheckoutPriority @default(NORMAL)
+
+  // Workflow tracking
+  issuedBy        User?          @relation("issuedBy", fields: [issuedById], references: [id])
+  issuedById      String?
+  issuedDate      DateTime?
+  returnedBy      User?          @relation("returnedBy", fields: [returnedById], references: [id])
+  returnedById    String?
+  returnedDate    DateTime?
+
+  // Additional details
+  notes           String?
+  returnNotes     String?
+  condition       String?        // Condition when returned
+
+  // Timestamps
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@map("item_checkouts")
+  @@index([materialId])
+  @@index([toolId])
+  @@index([userId])
+  @@index([status])
+  @@index([checkoutDate])
+  @@index([expectedReturnDate])
+}
+
+// Category model (shared by materials and tools)
+model Category {
+  id          String     @id @default(uuid())
+  name        String     @unique
+  description String?
+  type        CategoryType @default(GENERAL)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Relations
+  materials   Material[]
+  tools       Tool[]
+}
+
+// Location model
+model Location {
+  id          String     @id @default(uuid())
+  name        String     @unique
+  description String?
+  type        LocationType @default(WAREHOUSE)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Relations
+  materials   Material[]
+  tools       Tool[]
+}
+
+// Aircraft Type model
+model AircraftType {
+  id          String     @id @default(uuid())
+  name        String     @unique
+  description String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Relations
+  materials   Material[]
+  tools       Tool[]
+}
+
+// Material Request model (for requesting consumable materials)
+model MaterialRequest {
+  id                String            @id @default(uuid())
+  requestNumber     String            @unique
+  requesterId       String
+  materialId        String?           // For material requests
+  toolId            String?           // For tool requests
+  quantityRequested Int
+  quantityIssued    Int?
+  purpose           String
+  priority          RequestPriority
+  status            RequestStatus     @default(PENDING)
+  requestDate       DateTime          @default(now())
+  approvedDate      DateTime?
+  approvedById      String?
+  issuedDate        DateTime?
+  issuedById        String?
+  returnDate        DateTime?
+  notes             String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  // Relations
+  requester         User              @relation("requester", fields: [requesterId], references: [id])
+  material          Material?         @relation(fields: [materialId], references: [id])
+  tool              Tool?             @relation("toolRequests", fields: [toolId], references: [id])
+  approvedBy        User?             @relation("approver", fields: [approvedById], references: [id])
+  issuedBy          User?             @relation("issuer", fields: [issuedById], references: [id])
+  stockMovements    StockMovement[]
+}
+
+// Stock Movement model (for tracking material inventory changes)
+model StockMovement {
+  id            String          @id @default(uuid())
+  materialId    String
+  type          MovementType
+  quantity      Int
+  previousStock Int
+  newStock      Int
+  requestId     String?
+  performedById String
+  performedAt   DateTime        @default(now())
+  notes         String?
+  createdAt     DateTime        @default(now())
+
+  // Relations
+  material      Material        @relation(fields: [materialId], references: [id])
+  request       MaterialRequest? @relation(fields: [requestId], references: [id])
+  performedBy   User            @relation(fields: [performedById], references: [id])
+}
+
+// Audit Log model
+model AuditLog {
+  id          String    @id @default(uuid())
+  userId      String
+  action      String
+  entityType  String
+  entityId    String
+  oldValues   Json?
+  newValues   Json?
+  timestamp   DateTime  @default(now())
+  ipAddress   String?
+  userAgent   String?
+}
+
+// Notification model
+model Notification {
+  id          String    @id @default(uuid())
+  userId      String
+  title       String
+  message     String
+  type        String
+  isRead      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  readAt      DateTime?
+  user        User      @relation(fields: [userId], references: [id])
 }
