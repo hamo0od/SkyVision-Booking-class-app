@@ -9,6 +9,12 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  compiler: {
+    // Remove all console.* in production bundles except errors.
+    // Set to true to remove everything including errors:
+    // removeConsole: true,
+    removeConsole: { exclude: ['error'] },
+  },
 }
 
 export default nextConfig
