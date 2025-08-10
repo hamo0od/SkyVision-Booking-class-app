@@ -75,9 +75,51 @@ export function BookingForm({ classrooms }: BookingFormProps) {
     if (startTime) checkDuration(startTime, value)
   }
 
+  // Client-side guard: block submit if required fields not chosen (especially classroom/ECAA)
+  const preValidate = (formData: FormData): string | null => {
+    const classroomId = (formData.get("classroomId") as string | null)?.trim() || ""
+    const start = (formData.get("startTime") as string | null)?.trim() || ""
+    const end = (formData.get("endTime") as string | null)?.trim() || ""
+    const instructor = (formData.get("instructorName") as string | null)?.trim() || ""
+    const tOrder = (formData.get("trainingOrder") as string | null)?.trim() || ""
+    const participants = (formData.get("participants") as string | null)?.trim() || ""
+    const purpose = (formData.get("purpose") as string | null)?.trim() || ""
+    const ecaa = (formData.get("ecaaApproval") as string | null)?.trim() || ""
+
+    if (!classroomId) return "Please select a classroom."
+    if (!start) return "Please select a start date and time."
+    if (!end) return "Please select an end time."
+    if (!instructor) return "Instructor name is required."
+    if (!tOrder) return "Training order is required."
+    if (!participants) return "Number of participants is required."
+    if (!purpose) return "Course title is required."
+    if (ecaa !== "true" && ecaa !== "false") return "Please select your ECAA approval status."
+
+    if (ecaa === "true") {
+      const approvalNumber = (formData.get("approvalNumber") as string | null)?.trim() || ""
+      if (!approvalNumber) return "ECAA approval number is required."
+    } else if (ecaa === "false") {
+      const qualifications = (formData.get("qualifications") as string | null)?.trim() || ""
+      if (!qualifications) return "Qualifications are required if you don't have ECAA approval."
+    }
+
+    return null
+  }
+
   const handleSubmit = async (formData: FormData) => {
     setIsSubmitting(true)
     setMessage(null)
+
+    // ensure the selected values are posted
+    formData.set("classroomId", selectedClassroom)
+    formData.set("ecaaApproval", hasEcaaApproval)
+
+    const validationError = preValidate(formData)
+    if (validationError) {
+      setMessage({ type: "error", text: validationError })
+      setIsSubmitting(false)
+      return
+    }
 
     try {
       const result = await createBooking(formData)
@@ -89,9 +131,12 @@ export function BookingForm({ classrooms }: BookingFormProps) {
       setEndTime("")
       setHasEcaaApproval("")
       setDurationWarning("")
+
+      // Reset form elements
       const form = document.querySelector("form") as HTMLFormElement
       form?.reset()
 
+      // Scroll to top
       window.scrollTo({ top: 0, behavior: "smooth" })
     } catch (error) {
       setMessage({
@@ -131,18 +176,13 @@ export function BookingForm({ classrooms }: BookingFormProps) {
           </div>
         )}
 
-        <form action={handleSubmit} className="space-y-4 sm:space-y-6">
+        <form action={handleSubmit} className="space-y-4 sm:space-y-6" noValidate>
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-700">
               <MapPin className="inline h-4 w-4 mr-1" />
               Classroom
             </label>
-            <Select
-              name="classroomId"
-              value={selectedClassroom}
-              onValueChange={setSelectedClassroom}
-              // required on Select is mostly semantic; real validation is on the sr-only input below
-            >
+            <Select value={selectedClassroom} onValueChange={setSelectedClassroom}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select a classroom" />
               </SelectTrigger>
@@ -160,18 +200,8 @@ export function BookingForm({ classrooms }: BookingFormProps) {
                 ))}
               </SelectContent>
             </Select>
-            {/* Visually hidden, required field that participates in native validation */}
-            <input
-              type="text"
-              name="classroomId"
-              value={selectedClassroom}
-              required
-              pattern=".+"
-              aria-hidden="true"
-              tabIndex={-1}
-              onChange={() => {}}
-              className="sr-only absolute -m-px h-0 w-0 overflow-hidden p-0 opacity-0 pointer-events-none"
-            />
+            {/* Hidden inputs to carry values to FormData; validation handled in JS */}
+            <input type="hidden" name="classroomId" value={selectedClassroom} />
             {selectedClassroom && (
               <div className="text-xs text-gray-600 mt-1 p-2 bg-blue-50 rounded">
                 {classrooms.find((c) => c.id === selectedClassroom)?.description}
@@ -263,12 +293,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               <Award className="h-4 w-4 text-gray-600" />
               ECAA Approval Status
             </Label>
-            <RadioGroup
-              name="ecaaApproval"
-              value={hasEcaaApproval}
-              onValueChange={setHasEcaaApproval}
-              className="flex flex-col space-y-1"
-            >
+            <RadioGroup value={hasEcaaApproval} onValueChange={setHasEcaaApproval} className="flex flex-col space-y-1">
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="true" id="ecaa-yes" />
                 <Label htmlFor="ecaa-yes" className="font-normal">
@@ -282,18 +307,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
                 </Label>
               </div>
             </RadioGroup>
-            {/* Visually hidden required field for RadioGroup selection */}
-            <input
-              type="text"
-              name="ecaaApproval"
-              value={hasEcaaApproval}
-              required
-              pattern=".+"
-              aria-hidden="true"
-              tabIndex={-1}
-              onChange={() => {}}
-              className="sr-only absolute -m-px h-0 w-0 overflow-hidden p-0 opacity-0 pointer-events-none"
-            />
+            <input type="hidden" name="ecaaApproval" value={hasEcaaApproval} />
 
             {hasEcaaApproval !== "" &&
               (hasEcaaApproval === "true" ? (

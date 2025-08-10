@@ -21,20 +21,33 @@ export async function createBooking(formData: FormData) {
     throw new Error("User not found in database")
   }
 
-  const classroomId = formData.get("classroomId") as string
-  const startTime = new Date(formData.get("startTime") as string)
-  const endTime = new Date(formData.get("endTime") as string)
-  const purpose = formData.get("purpose") as string
-  const instructorName = formData.get("instructorName") as string
-  const trainingOrder = formData.get("trainingOrder") as string
-  const participants = Number.parseInt(formData.get("participants") as string) || 1
-  const ecaaApproval = formData.get("ecaaApproval") === "true"
-  const approvalNumber = ecaaApproval ? (formData.get("approvalNumber") as string) : null
-  const qualifications = !ecaaApproval ? (formData.get("qualifications") as string) : null
+  const classroomId = (formData.get("classroomId") as string | null)?.trim() || ""
+  const startTimeRaw = formData.get("startTime") as string | null
+  const endTimeRaw = formData.get("endTime") as string | null
+  const purpose = (formData.get("purpose") as string | null)?.trim() || ""
+  const instructorName = (formData.get("instructorName") as string | null)?.trim() || ""
+  const trainingOrder = (formData.get("trainingOrder") as string | null)?.trim() || ""
+  const participants = Number.parseInt((formData.get("participants") as string | null) || "0", 10)
+  const ecaaApprovalRaw = formData.get("ecaaApproval") as string | null
 
-  // Validate inputs
-  if (!classroomId || !startTime || !endTime || !purpose || !instructorName || !trainingOrder) {
+  // Require explicit ECAA choice: must be "true" or "false"
+  if (ecaaApprovalRaw !== "true" && ecaaApprovalRaw !== "false") {
+    throw new Error("Please select your ECAA approval status")
+  }
+  const ecaaApproval = ecaaApprovalRaw === "true"
+
+  const approvalNumber = ecaaApproval ? (formData.get("approvalNumber") as string | null)?.trim() || "" : null
+  const qualifications = !ecaaApproval ? (formData.get("qualifications") as string | null)?.trim() || "" : null
+
+  if (!classroomId || !startTimeRaw || !endTimeRaw || !purpose || !instructorName || !trainingOrder) {
     throw new Error("All fields are required")
+  }
+
+  const startTime = new Date(startTimeRaw)
+  const endTime = new Date(endTimeRaw)
+
+  if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
+    throw new Error("Invalid date/time provided")
   }
 
   if (startTime >= endTime) {
@@ -65,12 +78,16 @@ export async function createBooking(formData: FormData) {
     throw new Error("Qualifications are required if you don't have ECAA approval")
   }
 
-  // Check classroom capacity
+  // Check classroom exists and capacity
   const classroom = await prisma.classroom.findUnique({
     where: { id: classroomId },
   })
 
-  if (classroom && participants > classroom.capacity) {
+  if (!classroom) {
+    throw new Error("Invalid classroom selection")
+  }
+
+  if (participants > classroom.capacity) {
     throw new Error(`This classroom can only accommodate ${classroom.capacity} participants`)
   }
 
