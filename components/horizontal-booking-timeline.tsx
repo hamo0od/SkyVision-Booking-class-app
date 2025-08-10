@@ -43,6 +43,7 @@ export function HorizontalBookingTimeline() {
 
   useEffect(() => {
     loadTimelineData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate])
 
   const loadTimelineData = async () => {
@@ -82,11 +83,14 @@ export function HorizontalBookingTimeline() {
     })
   }
 
-  // Generate time slots from 8 AM to 5 PM (17:00)
+  // Generate time slots from 7:00 to 23:00 (11 PM) in 30-minute intervals
   const generateTimeSlots = () => {
-    const slots = []
-    for (let hour = 8; hour <= 17; hour++) {
-      for (let minute = 0; minute < 60; minute += 30) {
+    const slots: string[] = []
+    const startHour = 7
+    const endHour = 23
+    for (let hour = startHour; hour <= endHour; hour++) {
+      const minutes = hour === endHour ? [0] : [0, 30]
+      for (const minute of minutes) {
         const time = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
         slots.push(time)
       }
@@ -136,7 +140,7 @@ export function HorizontalBookingTimeline() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
             <Calendar className="h-5 w-5 text-blue-600" />
-            Daily Schedule
+            {"Daily Schedule (7 AM - 11 PM)"}
           </CardTitle>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => changeDate(-1)} className="p-2">
@@ -161,10 +165,9 @@ export function HorizontalBookingTimeline() {
                 const isHourStart = timeSlot.endsWith(":00")
                 return (
                   <div key={`header-${timeSlot}`} className="min-w-[80px] sm:min-w-[100px] text-center">
-                    {isHourStart && (
+                    {isHourStart ? (
                       <div className="text-xs font-medium text-gray-700 py-1 border-b border-gray-200">{timeSlot}</div>
-                    )}
-                    {!isHourStart && (
+                    ) : (
                       <div className="text-xs text-gray-400 py-1 border-b border-gray-100">{timeSlot}</div>
                     )}
                   </div>

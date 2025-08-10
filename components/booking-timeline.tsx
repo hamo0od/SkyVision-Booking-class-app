@@ -47,6 +47,7 @@ export function BookingTimeline() {
 
   useEffect(() => {
     loadTimelineData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate])
 
   const loadTimelineData = async () => {
@@ -86,11 +87,14 @@ export function BookingTimeline() {
     })
   }
 
-  // Generate time slots from 8 AM to 5 PM (17:00)
+  // Generate time slots from 7:00 to 23:00 (11 PM) in 30-minute intervals
   const generateTimeSlots = () => {
-    const slots = []
-    for (let hour = 8; hour <= 17; hour++) {
-      for (let minute = 0; minute < 60; minute += 30) {
+    const slots: string[] = []
+    const startHour = 7
+    const endHour = 23
+    for (let hour = startHour; hour <= endHour; hour++) {
+      const minutes = hour === endHour ? [0] : [0, 30]
+      for (const minute of minutes) {
         const time = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
         slots.push(time)
       }
@@ -145,7 +149,7 @@ export function BookingTimeline() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
             <Calendar className="h-5 w-5 text-blue-600" />
-            Daily Schedule (8 AM - 5 PM)
+            {"Daily Schedule (7 AM - 11 PM)"}
           </CardTitle>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => changeDate(-1)} className="p-2">
@@ -171,7 +175,7 @@ export function BookingTimeline() {
                 <span className="hidden sm:inline">Time</span>
               </div>
               <div
-                className={`grid gap-2`}
+                className="grid gap-2"
                 style={{ gridTemplateColumns: `repeat(${timelineData.classrooms.length}, minmax(120px, 1fr))` }}
               >
                 {timelineData.classrooms.map((classroom) => (
@@ -189,71 +193,72 @@ export function BookingTimeline() {
               </div>
             </div>
 
-            {/* Timeline grid */}
-            <div className="space-y-1">
-              {timeSlots.map((timeSlot) => (
-                <div key={timeSlot} className="grid grid-cols-[80px_1fr] sm:grid-cols-[100px_1fr] gap-2">
-                  <div className="text-xs sm:text-sm font-mono text-gray-600 py-2 px-1 sm:px-2 bg-gray-50 rounded border">
-                    {timeSlot}
-                  </div>
-                  <div
-                    className={`grid gap-2`}
-                    style={{ gridTemplateColumns: `repeat(${timelineData.classrooms.length}, minmax(120px, 1fr))` }}
-                  >
-                    {timelineData.classrooms.map((classroom) => {
-                      const booking = getBookingForSlot(classroom.id, timeSlot)
+            {/* Timeline grid (now vertically scrollable) */}
+            <div className="max-h-[70vh] overflow-y-auto pr-1">
+              <div className="space-y-1">
+                {timeSlots.map((timeSlot) => (
+                  <div key={timeSlot} className="grid grid-cols-[80px_1fr] sm:grid-cols-[100px_1fr] gap-2">
+                    <div className="text-xs sm:text-sm font-mono text-gray-600 py-2 px-1 sm:px-2 bg-gray-50 rounded border">
+                      {timeSlot}
+                    </div>
+                    <div
+                      className="grid gap-2"
+                      style={{ gridTemplateColumns: `repeat(${timelineData.classrooms.length}, minmax(120px, 1fr))` }}
+                    >
+                      {timelineData.classrooms.map((classroom) => {
+                        const booking = getBookingForSlot(classroom.id, timeSlot)
 
-                      if (booking) {
-                        const isStartSlot = isBookingStartSlot(booking, timeSlot)
-                        const startTime = new Date(booking.startTime)
-                        const endTime = new Date(booking.endTime)
+                        if (booking) {
+                          const isStartSlot = isBookingStartSlot(booking, timeSlot)
+                          const startTime = new Date(booking.startTime)
+                          const endTime = new Date(booking.endTime)
+
+                          return (
+                            <div
+                              key={`${classroom.id}-${timeSlot}`}
+                              className={`p-1 sm:p-2 rounded border-2 ${getStatusColor(booking.status)} ${
+                                isStartSlot ? "border-l-4 border-l-blue-500" : ""
+                              }`}
+                            >
+                              {isStartSlot ? (
+                                <>
+                                  <div className="text-xs font-medium truncate">
+                                    {booking.user.name || booking.user.username}
+                                  </div>
+                                  <div className="text-xs text-gray-600 truncate">
+                                    {startTime.toTimeString().slice(0, 5)} - {endTime.toTimeString().slice(0, 5)}
+                                  </div>
+                                  <div className="text-xs truncate mt-1 hidden sm:block">{booking.purpose}</div>
+                                  <Badge className={`text-xs mt-1 ${getStatusColor(booking.status)}`}>
+                                    {booking.status}
+                                  </Badge>
+                                </>
+                              ) : (
+                                <div className="text-xs text-center text-gray-500">
+                                  <span className="hidden sm:inline">Booked</span>
+                                  <span className="sm:hidden">•••</span>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        }
 
                         return (
                           <div
                             key={`${classroom.id}-${timeSlot}`}
-                            className={`p-1 sm:p-2 rounded border-2 ${getStatusColor(booking.status)} ${
-                              isStartSlot ? "border-l-4 border-l-blue-500" : ""
-                            }`}
+                            className="p-1 sm:p-2 rounded border border-gray-200 bg-white hover:bg-green-50 transition-colors"
                           >
-                            {isStartSlot && (
-                              <>
-                                <div className="text-xs font-medium truncate">
-                                  {booking.user.name || booking.user.username}
-                                </div>
-                                <div className="text-xs text-gray-600 truncate">
-                                  {startTime.toTimeString().slice(0, 5)} - {endTime.toTimeString().slice(0, 5)}
-                                </div>
-                                <div className="text-xs truncate mt-1 hidden sm:block">{booking.purpose}</div>
-                                <Badge className={`text-xs mt-1 ${getStatusColor(booking.status)}`}>
-                                  {booking.status}
-                                </Badge>
-                              </>
-                            )}
-                            {!isStartSlot && (
-                              <div className="text-xs text-center text-gray-500">
-                                <span className="hidden sm:inline">Booked</span>
-                                <span className="sm:hidden">•••</span>
-                              </div>
-                            )}
+                            <div className="text-xs text-green-600 text-center">
+                              <span className="hidden sm:inline">Available</span>
+                              <span className="sm:hidden">Free</span>
+                            </div>
                           </div>
                         )
-                      }
-
-                      return (
-                        <div
-                          key={`${classroom.id}-${timeSlot}`}
-                          className="p-1 sm:p-2 rounded border border-gray-200 bg-white hover:bg-green-50 transition-colors"
-                        >
-                          <div className="text-xs text-green-600 text-center">
-                            <span className="hidden sm:inline">Available</span>
-                            <span className="sm:hidden">Free</span>
-                          </div>
-                        </div>
-                      )
-                    })}
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         </div>
