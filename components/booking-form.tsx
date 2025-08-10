@@ -40,7 +40,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   const [startTime, setStartTime] = useState("")
   const [endTime, setEndTime] = useState("")
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
-  const [hasEcaaApproval, setHasEcaaApproval] = useState("")
+  const [hasEcaaApproval, setHasEcaaApproval] = useState("") // force explicit choice
   const [durationWarning, setDurationWarning] = useState("")
 
   // Calculate duration and show warning if needed
@@ -67,20 +67,12 @@ export function BookingForm({ classrooms }: BookingFormProps) {
 
   const handleStartTimeChange = (value: string) => {
     setStartTime(value)
-
-    // If end time exists, recalculate with new start time
-    if (endTime) {
-      checkDuration(value, endTime)
-    }
+    if (endTime) checkDuration(value, endTime)
   }
 
   const handleEndTimeChange = (value: string) => {
     setEndTime(value)
-
-    // If start time exists, check duration
-    if (startTime) {
-      checkDuration(startTime, value)
-    }
+    if (startTime) checkDuration(startTime, value)
   }
 
   const handleSubmit = async (formData: FormData) => {
@@ -97,11 +89,9 @@ export function BookingForm({ classrooms }: BookingFormProps) {
       setEndTime("")
       setHasEcaaApproval("")
       setDurationWarning("")
-      // Reset form elements
       const form = document.querySelector("form") as HTMLFormElement
       form?.reset()
 
-      // Scroll to top
       window.scrollTo({ top: 0, behavior: "smooth" })
     } catch (error) {
       setMessage({
@@ -147,7 +137,12 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               <MapPin className="inline h-4 w-4 mr-1" />
               Classroom
             </label>
-            <Select name="classroomId" value={selectedClassroom} onValueChange={setSelectedClassroom} required>
+            <Select
+              name="classroomId"
+              value={selectedClassroom}
+              onValueChange={setSelectedClassroom}
+              // required on Select is mostly semantic; real validation is on the sr-only input below
+            >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select a classroom" />
               </SelectTrigger>
@@ -165,7 +160,18 @@ export function BookingForm({ classrooms }: BookingFormProps) {
                 ))}
               </SelectContent>
             </Select>
-            <input type="hidden" name="classroomId" value={selectedClassroom} required />
+            {/* Visually hidden, required field that participates in native validation */}
+            <input
+              type="text"
+              name="classroomId"
+              value={selectedClassroom}
+              required
+              pattern=".+"
+              aria-hidden="true"
+              tabIndex={-1}
+              onChange={() => {}}
+              className="sr-only absolute -m-px h-0 w-0 overflow-hidden p-0 opacity-0 pointer-events-none"
+            />
             {selectedClassroom && (
               <div className="text-xs text-gray-600 mt-1 p-2 bg-blue-50 rounded">
                 {classrooms.find((c) => c.id === selectedClassroom)?.description}
@@ -276,7 +282,18 @@ export function BookingForm({ classrooms }: BookingFormProps) {
                 </Label>
               </div>
             </RadioGroup>
-            <input type="hidden" name="ecaaApproval" value={hasEcaaApproval} required />
+            {/* Visually hidden required field for RadioGroup selection */}
+            <input
+              type="text"
+              name="ecaaApproval"
+              value={hasEcaaApproval}
+              required
+              pattern=".+"
+              aria-hidden="true"
+              tabIndex={-1}
+              onChange={() => {}}
+              className="sr-only absolute -m-px h-0 w-0 overflow-hidden p-0 opacity-0 pointer-events-none"
+            />
 
             {hasEcaaApproval !== "" &&
               (hasEcaaApproval === "true" ? (

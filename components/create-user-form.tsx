@@ -10,7 +10,7 @@ import { UserPlus, CheckCircle, AlertCircle, Mail, User, Shield, Lock, Eye, EyeO
 
 export function CreateUserForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [selectedRole, setSelectedRole] = useState("")
+  const [selectedRole, setSelectedRole] = useState("") // force explicit choice
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [showPassword, setShowPassword] = useState(false)
 
@@ -118,7 +118,7 @@ export function CreateUserForm() {
               <Shield className="inline h-4 w-4 mr-1" />
               Role
             </label>
-            <Select name="role" value={selectedRole} onValueChange={setSelectedRole} required>
+            <Select name="role" value={selectedRole} onValueChange={setSelectedRole}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select user role" />
               </SelectTrigger>
@@ -137,7 +137,18 @@ export function CreateUserForm() {
                 </SelectItem>
               </SelectContent>
             </Select>
-            <input type="hidden" name="role" value={selectedRole} required />
+            {/* Visually hidden, required field that participates in native validation */}
+            <input
+              type="text"
+              name="role"
+              value={selectedRole}
+              required
+              pattern=".+"
+              aria-hidden="true"
+              tabIndex={-1}
+              onChange={() => {}}
+              className="sr-only absolute -m-px h-0 w-0 overflow-hidden p-0 opacity-0 pointer-events-none"
+            />
           </div>
 
           <Button
