@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -27,6 +27,22 @@ export function ModernDateTimePicker({
   timeOnly = false,
   linkedDate,
 }: ModernDateTimePickerProps) {
+  // Helpers
+  const pad = (n: number) => n.toString().padStart(2, "0")
+  const formatDate = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+  const formatTimeDisplay = (timeString: string) => {
+    const [hours, minutes] = timeString.split(":").map(Number)
+    const period = hours >= 12 ? "PM" : "AM"
+    const hour12 = hours % 12 || 12
+    return `${hour12}:${pad(minutes)} ${period}`
+  }
+  const timeRangeLabel = (fromHour: number, toHour: number) =>
+    `${formatTimeDisplay(`${pad(fromHour)}:00`)} - ${formatTimeDisplay(`${pad(toHour)}:00`)}`
+
+  // Business hours (updated): 07:00 to 23:00
+  const MIN_HOUR = 7
+  const MAX_HOUR = 23
+
   // Parse initial value if provided
   const initialDate = value ? value.split("T")[0] : ""
   const initialTime = value ? value.split("T")[1]?.slice(0, 5) : ""
@@ -37,24 +53,18 @@ export function ModernDateTimePicker({
   const [currentMonth, setCurrentMonth] = useState(new Date())
 
   const today = new Date()
-  const minDate = min ? new Date(min) : today
 
   // Auto-advance to next day if current time is past business hours
   useEffect(() => {
     if (!timeOnly && !selectedDate) {
       const now = new Date()
       const currentHour = now.getHours()
-
-      // If it's past 6 PM (18:00), automatically set to next day
-      if (currentHour >= 18) {
+      if (currentHour >= MAX_HOUR) {
         const tomorrow = new Date(now)
         tomorrow.setDate(tomorrow.getDate() + 1)
-        const tomorrowString = formatDate(tomorrow)
-        setSelectedDate(tomorrowString)
+        setSelectedDate(formatDate(tomorrow))
       } else {
-        // Set to today if within business hours
-        const todayString = formatDate(now)
-        setSelectedDate(todayString)
+        setSelectedDate(formatDate(now))
       }
     }
   }, [timeOnly, selectedDate])
@@ -72,26 +82,15 @@ export function ModernDateTimePicker({
   useEffect(() => {
     if (timeOnly && linkedDate) {
       const date = linkedDate.split("T")[0]
-      if (date) {
-        setSelectedDate(date)
-      }
+      if (date) setSelectedDate(date)
     }
   }, [timeOnly, linkedDate])
 
   // Update parent when selection changes
   useEffect(() => {
     if (selectedTime && selectedDate) {
-      let dateToUse = selectedDate
-
-      // In time-only mode, use the linked date
-      if (timeOnly && linkedDate) {
-        dateToUse = linkedDate.split("T")[0]
-      }
-
-      if (dateToUse) {
-        const datetime = `${dateToUse}T${selectedTime}`
-        onChange?.(datetime)
-      }
+      const dateToUse = timeOnly && linkedDate ? linkedDate.split("T")[0] : selectedDate
+      if (dateToUse) onChange?.(`${dateToUse}T${selectedTime}`)
     }
   }, [selectedDate, selectedTime, onChange, timeOnly, linkedDate])
 
@@ -103,108 +102,63 @@ export function ModernDateTimePicker({
     const daysInMonth = lastDay.getDate()
     const startingDayOfWeek = firstDay.getDay()
 
-    const days = []
-
-    // Add empty cells for days before the first day of the month
-    for (let i = 0; i < startingDayOfWeek; i++) {
-      days.push(null)
-    }
-
-    // Add all days of the month
-    for (let day = 1; day <= daysInMonth; day++) {
-      days.push(new Date(year, month, day))
-    }
-
+    const days: (Date | null)[] = []
+    for (let i = 0; i < startingDayOfWeek; i++) days.push(null)
+    for (let day = 1; day <= daysInMonth; day++) days.push(new Date(year, month, day))
     return days
   }
 
-  // Format date to YYYY-MM-DD
-  const formatDate = (date: Date) => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, "0")
-    const day = String(date.getDate()).padStart(2, "0")
-    return `${year}-${month}-${day}`
-  }
-
-  // Check if a date should be disabled
   const isDateDisabled = (date: Date) => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const compareDate = new Date(date)
-    compareDate.setHours(0, 0, 0, 0)
-
-    if (min) {
-      const minDateOnly = new Date(min)
-      minDateOnly.setHours(0, 0, 0, 0)
-      return compareDate < minDateOnly
-    }
-
-    return compareDate < today
-  }
-
-  const handleDateSelect = (date: Date) => {
-    const formattedDate = formatDate(date)
-    setSelectedDate(formattedDate)
-    setShowCalendar(false)
-  }
-
-  const handleTimeSelect = (time: string) => {
-    setSelectedTime(time)
+    const minDate = min ? new Date(min) : new Date()
+    const d1 = new Date(minDate)
+    const d2 = new Date(date)
+    d1.setHours(0, 0, 0, 0)
+    d2.setHours(0, 0, 0, 0)
+    return d2 < d1
   }
 
   const navigateMonth = (direction: "prev" | "next") => {
     setCurrentMonth((prev) => {
       const newMonth = new Date(prev)
-      if (direction === "prev") {
-        newMonth.setMonth(prev.getMonth() - 1)
-      } else {
-        newMonth.setMonth(prev.getMonth() + 1)
-      }
+      newMonth.setMonth(prev.getMonth() + (direction === "prev" ? -1 : 1))
       return newMonth
     })
   }
 
-  // Generate time slots from 8:00 AM to 6:00 PM in 30-minute intervals
+  // Generate time slots from 07:00 to 23:00 in 30-minute intervals (includes 23:00, excludes 23:30)
   const generateTimeSlots = () => {
-    const slots = []
-    for (let hour = 8; hour <= 18; hour++) {
+    const slots: string[] = []
+    for (let hour = MIN_HOUR; hour <= MAX_HOUR; hour++) {
       for (let minute = 0; minute < 60; minute += 30) {
-        // Skip 6:30 PM
-        if (hour === 18 && minute > 0) continue
-
-        const timeString = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
-        slots.push(timeString)
+        if (hour === MAX_HOUR && minute > 0) continue
+        slots.push(`${pad(hour)}:${pad(minute)}`)
       }
     }
     return slots
   }
 
-  // Get available time slots based on selected date
-  const getAvailableTimeSlots = () => {
+  // Get available time slots based on selected date (filters past slots for today)
+  const availableTimeSlots = useMemo(() => {
     const allSlots = generateTimeSlots()
-
-    // If no date selected, return all slots
     if (!selectedDate) return allSlots
 
-    const selectedDateObj = new Date(selectedDate + "T00:00:00")
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const sel = new Date(`${selectedDate}T00:00:00`)
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
 
-    // If selected date is today, filter out past times
-    if (selectedDateObj.getTime() === today.getTime()) {
+    // If selected date is today, filter out past times (round up to next half-hour)
+    if (sel.getTime() === todayStart.getTime()) {
       const now = new Date()
-      const currentHour = now.getHours()
-      const currentMinute = now.getMinutes()
-      const currentTimeString = `${currentHour.toString().padStart(2, "0")}:${currentMinute.toString().padStart(2, "0")}`
-
-      return allSlots.filter((slot) => slot > currentTimeString)
+      const minutesNow = now.getHours() * 60 + now.getMinutes()
+      const nextHalfHour = Math.ceil(minutesNow / 30) * 30
+      return allSlots.filter((slot) => {
+        const [hh, mm] = slot.split(":").map(Number)
+        const mins = hh * 60 + mm
+        return mins > nextHalfHour
+      })
     }
-
-    // For future dates, return all slots
     return allSlots
-  }
-
-  const availableTimeSlots = getAvailableTimeSlots()
+  }, [selectedDate])
 
   const days = getDaysInMonth(currentMonth)
   const monthNames = [
@@ -223,13 +177,10 @@ export function ModernDateTimePicker({
   ]
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-  // Display selected date in a readable format
   const displaySelectedDate = () => {
     if (!selectedDate) return "Pick a date"
-
     const [year, month, day] = selectedDate.split("-").map(Number)
     const date = new Date(year, month - 1, day)
-
     return date.toLocaleDateString("en-US", {
       weekday: "short",
       year: "numeric",
@@ -238,12 +189,13 @@ export function ModernDateTimePicker({
     })
   }
 
-  // Format time for display (12-hour format)
-  const formatTimeDisplay = (timeString: string) => {
-    const [hours, minutes] = timeString.split(":").map(Number)
-    const period = hours >= 12 ? "PM" : "AM"
-    const hour12 = hours % 12 || 12
-    return `${hour12}:${minutes.toString().padStart(2, "0")} ${period}`
+  const handleDateSelect = (date: Date) => {
+    setSelectedDate(formatDate(date))
+    setShowCalendar(false)
+  }
+
+  const handleTimeSelect = (time: string) => {
+    setSelectedTime(time)
   }
 
   return (
@@ -259,21 +211,21 @@ export function ModernDateTimePicker({
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm font-medium text-gray-600">
                 <Clock className="h-4 w-4 text-blue-500" />
-                <span>Select Time (8:00 AM - 6:00 PM)</span>
+                <span>{`Select Time (${timeRangeLabel(MIN_HOUR, MAX_HOUR)})`}</span>
               </div>
 
               <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md">
-                {availableTimeSlots.map((time) => (
+                {availableTimeSlots.map((t) => (
                   <Button
-                    key={time}
+                    key={t}
                     type="button"
-                    variant={selectedTime === time ? "default" : "ghost"}
+                    variant={selectedTime === t ? "default" : "ghost"}
                     className={`w-full justify-start text-left font-normal rounded-none border-0 text-sm ${
-                      selectedTime === time ? "bg-blue-600 text-white" : "hover:bg-blue-50"
+                      selectedTime === t ? "bg-blue-600 text-white" : "hover:bg-blue-50"
                     }`}
-                    onClick={() => handleTimeSelect(time)}
+                    onClick={() => handleTimeSelect(t)}
                   >
-                    {formatTimeDisplay(time)}
+                    {formatTimeDisplay(t)}
                   </Button>
                 ))}
               </div>
@@ -292,7 +244,7 @@ export function ModernDateTimePicker({
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full justify-start text-left font-normal text-sm"
+                    className="w-full justify-start text-left font-normal text-sm bg-transparent"
                     onClick={() => setShowCalendar(!showCalendar)}
                   >
                     {selectedDate ? displaySelectedDate() : <span className="text-gray-500">Pick a date</span>}
@@ -325,7 +277,7 @@ export function ModernDateTimePicker({
 
                       {/* Calendar Days */}
                       <div className="grid grid-cols-7 gap-1">
-                        {days.map((date, index) => (
+                        {getDaysInMonth(currentMonth).map((date, index) => (
                           <div key={index} className="aspect-square">
                             {date && (
                               <Button
@@ -353,22 +305,22 @@ export function ModernDateTimePicker({
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium text-gray-600">
                   <Clock className="h-4 w-4 text-blue-500" />
-                  <span>Select Time (8:00 AM - 6:00 PM)</span>
+                  <span>{`Select Time (${timeRangeLabel(MIN_HOUR, MAX_HOUR)})`}</span>
                 </div>
 
                 <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md">
                   {availableTimeSlots.length > 0 ? (
-                    availableTimeSlots.map((time) => (
+                    availableTimeSlots.map((t) => (
                       <Button
-                        key={time}
+                        key={t}
                         type="button"
-                        variant={selectedTime === time ? "default" : "ghost"}
+                        variant={selectedTime === t ? "default" : "ghost"}
                         className={`w-full justify-start text-left font-normal rounded-none border-0 text-sm ${
-                          selectedTime === time ? "bg-blue-600 text-white" : "hover:bg-blue-50"
+                          selectedTime === t ? "bg-blue-600 text-white" : "hover:bg-blue-50"
                         }`}
-                        onClick={() => handleTimeSelect(time)}
+                        onClick={() => handleTimeSelect(t)}
                       >
-                        {formatTimeDisplay(time)}
+                        {formatTimeDisplay(t)}
                       </Button>
                     ))
                   ) : (
