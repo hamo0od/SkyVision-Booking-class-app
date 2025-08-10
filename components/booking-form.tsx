@@ -40,7 +40,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   const [startTime, setStartTime] = useState("")
   const [endTime, setEndTime] = useState("")
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
-  const [hasEcaaApproval, setHasEcaaApproval] = useState("false")
+  const [hasEcaaApproval, setHasEcaaApproval] = useState("")
   const [durationWarning, setDurationWarning] = useState("")
 
   // Calculate duration and show warning if needed
@@ -95,7 +95,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
       setSelectedClassroom("")
       setStartTime("")
       setEndTime("")
-      setHasEcaaApproval("false")
+      setHasEcaaApproval("")
       setDurationWarning("")
       // Reset form elements
       const form = document.querySelector("form") as HTMLFormElement
@@ -165,6 +165,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
                 ))}
               </SelectContent>
             </Select>
+            <input type="hidden" name="classroomId" value={selectedClassroom} required />
             {selectedClassroom && (
               <div className="text-xs text-gray-600 mt-1 p-2 bg-blue-50 rounded">
                 {classrooms.find((c) => c.id === selectedClassroom)?.description}
@@ -275,34 +276,36 @@ export function BookingForm({ classrooms }: BookingFormProps) {
                 </Label>
               </div>
             </RadioGroup>
+            <input type="hidden" name="ecaaApproval" value={hasEcaaApproval} required />
 
-            {hasEcaaApproval === "true" ? (
-              <div className="pt-2">
-                <Label htmlFor="approvalNumber" className="text-sm">
-                  ECAA Approval Number
-                </Label>
-                <Input
-                  id="approvalNumber"
-                  name="approvalNumber"
-                  placeholder="Enter your ECAA approval number"
-                  required
-                  className="mt-1"
-                />
-              </div>
-            ) : (
-              <div className="pt-2">
-                <Label htmlFor="qualifications" className="text-sm">
-                  Your Qualifications
-                </Label>
-                <Textarea
-                  id="qualifications"
-                  name="qualifications"
-                  placeholder="Describe your qualifications and experience"
-                  required
-                  className="mt-1 min-h-[80px]"
-                />
-              </div>
-            )}
+            {hasEcaaApproval !== "" &&
+              (hasEcaaApproval === "true" ? (
+                <div className="pt-2">
+                  <Label htmlFor="approvalNumber" className="text-sm">
+                    ECAA Approval Number
+                  </Label>
+                  <Input
+                    id="approvalNumber"
+                    name="approvalNumber"
+                    placeholder="Enter your ECAA approval number"
+                    required
+                    className="mt-1"
+                  />
+                </div>
+              ) : (
+                <div className="pt-2">
+                  <Label htmlFor="qualifications" className="text-sm">
+                    Your Qualifications
+                  </Label>
+                  <Textarea
+                    id="qualifications"
+                    name="qualifications"
+                    placeholder="Describe your qualifications and experience"
+                    required
+                    className="mt-1 min-h-[80px]"
+                  />
+                </div>
+              ))}
           </div>
 
           <div className="space-y-2">

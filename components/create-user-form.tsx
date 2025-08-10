@@ -137,6 +137,7 @@ export function CreateUserForm() {
                 </SelectItem>
               </SelectContent>
             </Select>
+            <input type="hidden" name="role" value={selectedRole} required />
           </div>
 
           <Button
