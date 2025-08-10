@@ -1,0 +1,72 @@
+// components/booking-timeline.tsx
+import React from 'react';
+import { CardTitle, Calendar } from './ui';
+
+function generateTimeSlots() {
+  const slots: string[] = [];
+  for (let hour = 7; hour < 23; hour++) {
+    slots.push(`${hour.toString().padStart(2, "0")}:00`);
+    slots.push(`${hour.toString().padStart(2, "0")}:30`);
+  }
+  // Include 23:00 as the final slot
+  slots.push("23:00");
+  return slots;
+}
+
+const BookingTimeline = () => {
+  const timeSlots = generateTimeSlots();
+
+  return (
+    <div>
+      <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+        <Calendar className="h-5 w-5 text-blue-600" />
+        {"Daily Schedule (7 AM - 11 PM)"}
+      </CardTitle>
+      <div className="timeline">
+        {timeSlots.map(slot => (
+          <div key={slot} className="slot">
+            {slot}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default BookingTimeline;
+
+// components/horizontal-booking-timeline.tsx
+import React from 'react';
+import { CardTitle, Calendar } from './ui';
+
+function generateTimeSlots() {
+  const slots: string[] = [];
+  for (let hour = 7; hour < 23; hour++) {
+    slots.push(`${hour.toString().padStart(2, "0")}:00`);
+    slots.push(`${hour.toString().padStart(2, "0")}:30`);
+  }
+  slots.push("23:00");
+  return slots;
+}
+
+const HorizontalBookingTimeline = () => {
+  const timeSlots = generateTimeSlots();
+
+  return (
+    <div className="horizontal-timeline">
+      <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+        <Calendar className="h-5 w-5 text-blue-600" />
+        {"Daily Schedule (7 AM - 11 PM)"}
+      </CardTitle>
+      <div className="slots-container">
+        {timeSlots.map(slot => (
+          <div key={slot} className="slot">
+            {slot}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default HorizontalBookingTimeline;
