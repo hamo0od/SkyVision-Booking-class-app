@@ -1,7 +1,7 @@
 import type React from "react"
 import "./globals.css"
 import OverlayCleaner from "@/components/overlay-cleaner"
-import Providers from "./providers"
+import { Providers } from "./providers"
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -15,5 +15,5 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 }
 
 export const metadata = {
-      generator: 'v0.dev'
-    };
+  generator: "v0.dev",
+}

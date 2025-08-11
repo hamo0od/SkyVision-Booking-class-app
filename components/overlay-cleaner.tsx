@@ -3,11 +3,18 @@
 import { useEffect } from "react"
 
 /**
+ * OverlayCleaner
+ * Safely cleans up any transient body styles that might be left by modals/sheets after redirects or forced logouts.
  * Hides common 3rd‑party floating launchers (e.g., Nolt, Intercom) that appear bottom-left
  * and may inject after hydration. Runs only on the client.
  */
 export default function OverlayCleaner() {
   useEffect(() => {
+    // Remove potential body locks (common with dialogs/sheets)
+    document.documentElement.style.removeProperty("overflow")
+    document.body.style.removeProperty("overflow")
+    document.body.style.removeProperty("paddingRight")
+
     const css = `
       /* Known providers */
       #nolt-wrapper, .nolt-launcher, [data-nolt], iframe[src*="nolt.io"] { display: none !important; visibility: hidden !important; }
