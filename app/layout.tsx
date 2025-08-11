@@ -1,7 +1,14 @@
 import type React from "react"
-import "./globals.css"
-import OverlayCleaner from "@/components/overlay-cleaner"
+import "@/app/globals.css"
+import type { Metadata } from "next"
 import { Providers } from "./providers"
+import { OverlayCleaner } from "@/components/overlay-cleaner"
+
+export const metadata: Metadata = {
+  title: "Class Room Booking App",
+  description: "Book classrooms, manage users, and view timelines",
+    generator: 'v0.dev'
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -12,8 +19,4 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </body>
     </html>
   )
-}
-
-export const metadata = {
-  generator: "v0.dev",
 }
