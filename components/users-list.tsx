@@ -13,6 +13,7 @@ interface UserType {
   id: string
   email: string
   name: string | null
+  username: string
   role: string
   createdAt: Date
   _count: {
@@ -27,11 +28,16 @@ interface UsersListProps {
 
 export function UsersList({ users, currentUserId }: UsersListProps) {
   const [editingUser, setEditingUser] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState({ name: "", role: "" })
+  const [editForm, setEditForm] = useState({ name: "", role: "", username: "", password: "" })
 
   const handleEdit = (user: UserType) => {
     setEditingUser(user.id)
-    setEditForm({ name: user.name || "", role: user.role })
+    setEditForm({
+      name: user.name || "",
+      role: user.role,
+      username: user.username,
+      password: "",
+    })
   }
 
   const handleSave = async (userId: string) => {
@@ -39,6 +45,10 @@ export function UsersList({ users, currentUserId }: UsersListProps) {
       const formData = new FormData()
       formData.append("name", editForm.name)
       formData.append("role", editForm.role)
+      formData.append("username", editForm.username)
+      if (editForm.password && editForm.password.trim() !== "") {
+        formData.append("password", editForm.password)
+      }
 
       await updateUser(userId, formData)
       setEditingUser(null)
@@ -148,6 +158,26 @@ export function UsersList({ users, currentUserId }: UsersListProps) {
               <BookOpen className="h-4 w-4" />
               <span>{user._count.bookings} booking(s)</span>
             </div>
+
+            {editingUser === user.id && (
+              <div className="pt-2 border-t border-gray-100">
+                <div className="mt-3">
+                  <label htmlFor={"password-" + user.id} className="block text-sm font-medium text-gray-700">
+                    New Password
+                  </label>
+                  <Input
+                    id={"password-" + user.id}
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="Set a new password (optional)"
+                    value={editForm.password}
+                    onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Leave blank to keep the current password.</p>
+                </div>
+              </div>
+            )}
 
             {user.id !== currentUserId && (
               <div className="flex gap-2 pt-2 border-t border-gray-100">
