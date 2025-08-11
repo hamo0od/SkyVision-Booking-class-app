@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useToast } from "@/hooks/use-toast"
 import { Shield, Mail, Calendar, BookOpen, Edit2, Trash2, Save, X, User } from "lucide-react"
 
 interface UserType {
@@ -28,6 +29,8 @@ interface UsersListProps {
 
 export function UsersList({ users, currentUserId }: UsersListProps) {
   const [editingUser, setEditingUser] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const { toast } = useToast()
   const [editForm, setEditForm] = useState({ name: "", role: "", username: "", password: "" })
 
   const handleEdit = (user: UserType) => {
@@ -42,6 +45,7 @@ export function UsersList({ users, currentUserId }: UsersListProps) {
 
   const handleSave = async (userId: string) => {
     try {
+      setIsSaving(true)
       const formData = new FormData()
       formData.append("name", editForm.name)
       formData.append("role", editForm.role)
@@ -50,10 +54,26 @@ export function UsersList({ users, currentUserId }: UsersListProps) {
         formData.append("password", editForm.password)
       }
 
-      await updateUser(userId, formData)
+      const res = (await updateUser(userId, formData)) as {
+        success: boolean
+        message: string
+        passwordChanged?: boolean
+      }
       setEditingUser(null)
+
+      toast({
+        title: res?.passwordChanged ? "Password changed successfully" : "User updated",
+        description:
+          res?.message ?? (res?.passwordChanged ? "The user will be signed out immediately." : "Changes saved."),
+      })
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to update user")
+      toast({
+        title: "Update failed",
+        description: error instanceof Error ? error.message : "Failed to update user",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -61,8 +81,13 @@ export function UsersList({ users, currentUserId }: UsersListProps) {
     if (confirm(`Are you sure you want to delete ${userName}? This will also delete all their bookings.`)) {
       try {
         await deleteUser(userId)
+        toast({ title: "User deleted", description: `${userName} and their bookings were removed.` })
       } catch (error) {
-        alert(error instanceof Error ? error.message : "Failed to delete user")
+        toast({
+          title: "Deletion failed",
+          description: error instanceof Error ? error.message : "Failed to delete user",
+          variant: "destructive",
+        })
       }
     }
   }
@@ -160,8 +185,20 @@ export function UsersList({ users, currentUserId }: UsersListProps) {
             </div>
 
             {editingUser === user.id && (
-              <div className="pt-2 border-t border-gray-100">
-                <div className="mt-3">
+              <div className="pt-2 border-t border-gray-100 space-y-3">
+                <div>
+                  <label htmlFor={"username-" + user.id} className="block text-sm font-medium text-gray-700">
+                    Username
+                  </label>
+                  <Input
+                    id={"username-" + user.id}
+                    placeholder="Username"
+                    value={editForm.username}
+                    onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
                   <label htmlFor={"password-" + user.id} className="block text-sm font-medium text-gray-700">
                     New Password
                   </label>
@@ -187,11 +224,18 @@ export function UsersList({ users, currentUserId }: UsersListProps) {
                       size="sm"
                       onClick={() => handleSave(user.id)}
                       className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                      disabled={isSaving}
                     >
                       <Save className="h-4 w-4 mr-1" />
-                      Save
+                      {isSaving ? "Saving..." : "Save"}
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => setEditingUser(null)} className="flex-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditingUser(null)}
+                      className="flex-1"
+                      disabled={isSaving}
+                    >
                       <X className="h-4 w-4 mr-1" />
                       Cancel
                     </Button>
