@@ -20,7 +20,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      {/* Suppress hydration warnings on the body. Some extensions add classes (e.g. vsc-*) before hydration. */}
+      <body className={inter.className} suppressHydrationWarning>
+        {/* Runs after hydration; safely removes stubborn bottom-left overlay widgets */}
         <OverlayCleaner />
         <Providers>{children}</Providers>
       </body>
