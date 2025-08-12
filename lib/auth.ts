@@ -8,31 +8,40 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: "credentials",
       credentials: {
-        identifier: { label: "Email or Username", type: "text" },
+        username: { label: "Username", type: "text" },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.identifier || !credentials?.password) {
+        console.log("Auth attempt with:", { username: credentials?.username })
+
+        if (!credentials?.username || !credentials?.password) {
+          console.log("Missing credentials")
           return null
         }
 
         // Try to find user by email or username
         const user = await prisma.user.findFirst({
           where: {
-            OR: [{ email: credentials.identifier }, { username: credentials.identifier }],
+            OR: [{ email: credentials.username }, { username: credentials.username }],
           },
         })
 
+        console.log("Found user:", user ? { id: user.id, username: user.username, email: user.email } : "none")
+
         if (!user || !user.password) {
+          console.log("User not found or no password")
           return null
         }
 
         const isPasswordValid = await bcrypt.compare(credentials.password, user.password)
+        console.log("Password valid:", isPasswordValid)
 
         if (!isPasswordValid) {
+          console.log("Invalid password")
           return null
         }
 
+        console.log("Auth successful for user:", user.username)
         return {
           id: user.id,
           email: user.email,
@@ -61,6 +70,7 @@ export const authOptions: NextAuthOptions = {
 
         // If tokenVersion doesn't match, invalidate the token
         if (!dbUser || dbUser.tokenVersion !== token.tokenVersion) {
+          console.log("Token version mismatch, invalidating session")
           return null
         }
       }
@@ -83,4 +93,5 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
   },
+  debug: true, // Enable debug logs
 }

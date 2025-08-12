@@ -16,8 +16,9 @@ async function main() {
 
   console.log("🌱 Creating fresh users...")
 
-  // Hash password
+  // Hash password with same method as your app
   const hashedPassword = await bcrypt.hash("password", 12)
+  console.log("Generated hash:", hashedPassword)
 
   // Create admin user
   const admin = await prisma.user.create({
@@ -30,6 +31,7 @@ async function main() {
       tokenVersion: 0,
     },
   })
+  console.log("✅ Created admin:", { id: admin.id, username: admin.username, email: admin.email })
 
   // Create regular user
   const user = await prisma.user.create({
@@ -42,16 +44,32 @@ async function main() {
       tokenVersion: 0,
     },
   })
+  console.log("✅ Created user:", { id: user.id, username: user.username, email: user.email })
 
-  console.log("✅ Database reset and seeded successfully!")
-  console.log("")
-  console.log("🔑 Login credentials:")
-  console.log("Admin: admin@example.com / password")
-  console.log("User:  user@example.com / password")
-  console.log("")
-  console.log("Or use usernames:")
-  console.log("Admin: admin / password")
-  console.log("User:  user / password")
+  // Verify the users were created correctly
+  const allUsers = await prisma.user.findMany({
+    select: {
+      id: true,
+      username: true,
+      email: true,
+      role: true,
+      tokenVersion: true,
+      password: true,
+    },
+  })
+
+  console.log("\n📋 All users in database:")
+  allUsers.forEach((u) => {
+    console.log(`- ${u.username} (${u.email}) - Role: ${u.role} - TokenVersion: ${u.tokenVersion}`)
+    console.log(`  Password hash: ${u.password.substring(0, 20)}...`)
+  })
+
+  console.log("\n🔑 Login credentials:")
+  console.log("Username: admin | Password: password")
+  console.log("Username: user  | Password: password")
+  console.log("\nOr use emails:")
+  console.log("Email: admin@example.com | Password: password")
+  console.log("Email: user@example.com  | Password: password")
 }
 
 main()

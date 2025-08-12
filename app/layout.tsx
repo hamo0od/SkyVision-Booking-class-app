@@ -7,8 +7,8 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Classroom Booking System",
-  description: "Book classrooms with admin approval",
+  title: "Classroom Booking App",
+  description: "Book classrooms for your events",
     generator: 'v0.dev'
 }
 

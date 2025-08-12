@@ -1,3 +1,6 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,13 +14,15 @@ model User {
   id           String    @id @default(cuid())
   email        String    @unique
   username     String    @unique
-  password     String?
-  name         String?
+  password     String
+  name         String
   role         Role      @default(USER)
   tokenVersion Int       @default(0)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   bookings     Booking[]
+
+  @@map("users")
 }
 
 model Classroom {
@@ -28,29 +33,25 @@ model Classroom {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   bookings    Booking[]
+
+  @@map("classrooms")
 }
 
 model Booking {
-  id              String        @id @default(cuid())
-  userId          String
-  classroomId     String
-  startTime       DateTime
-  endTime         DateTime
-  purpose         String
-  status          BookingStatus @default(PENDING)
-  participants    Int           @default(1)
-  instructorName  String
-  trainingOrder   String
-  ecaaApproval    Boolean       @default(false)
-  approvalNumber  String?
-  qualifications  String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  
-  user            User          @relation(fields: [userId], references: [id])
-  classroom       Classroom     @relation(fields: [classroomId], references: [id])
-  
-  @@unique([classroomId, startTime, endTime])
+  id          String    @id @default(cuid())
+  userId      String
+  classroomId String
+  startTime   DateTime
+  endTime     DateTime
+  purpose     String
+  status      Status    @default(PENDING)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  classroom Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+
+  @@map("bookings")
 }
 
 enum Role {
@@ -58,7 +59,7 @@ enum Role {
   ADMIN
 }
 
-enum BookingStatus {
+enum Status {
   PENDING
   APPROVED
   REJECTED
