@@ -38,8 +38,6 @@ export async function createUser(formData: FormData) {
         name,
         password: hashedPassword,
         role,
-        tokenVersion: 0, // initialize
-        passwordUpdatedAt: new Date(),
       },
     })
 
@@ -78,8 +76,6 @@ export async function updateUser(userId: string, formData: FormData) {
 
     if (password && password.trim() !== "") {
       updateData.password = await bcrypt.hash(password, 12)
-      updateData.passwordUpdatedAt = new Date()
-      updateData.tokenVersion = { increment: 1 } // invalidate existing JWTs
       passwordChanged = true
     }
 
@@ -91,10 +87,7 @@ export async function updateUser(userId: string, formData: FormData) {
     revalidatePath("/admin/users")
     return {
       success: true,
-      message: passwordChanged
-        ? "Password changed successfully. The user session has been expired."
-        : "User updated successfully!",
-      passwordChanged,
+      message: "User updated successfully!",
     }
   } catch (error) {
     console.error("Database error:", error)
