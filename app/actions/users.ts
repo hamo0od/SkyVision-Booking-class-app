@@ -1,33 +1,32 @@
 "use server"
 
 import { prisma } from "@/lib/db"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
-import { revalidatePath } from "next/cache"
 import bcrypt from "bcryptjs"
+import { revalidatePath } from "next/cache"
 
 export async function createUser(formData: FormData) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.email) throw new Error("Unauthorized")
-
-  // Get the actual admin user from database
-  const adminUser = await prisma.user.findUnique({ where: { email: session.user.email } })
-  if (!adminUser || adminUser.role !== "ADMIN") throw new Error("Unauthorized - Admin access required")
-
   const email = formData.get("email") as string
   const username = formData.get("username") as string
   const name = formData.get("name") as string
   const password = formData.get("password") as string
-  const role = formData.get("role") as "USER" | "ADMIN"
+  const role = formData.get("role") as string
 
-  if (!email || !username || !name || !password || !role) throw new Error("All fields are required")
+  if (!email || !username || !name || !password || !role) {
+    throw new Error("All fields are required")
+  }
 
-  const existingUser = await prisma.user.findUnique({ where: { email } })
-  if (existingUser) throw new Error("User with this email already exists")
+  // Check if user already exists
+  const existingUser = await prisma.user.findFirst({
+    where: {
+      OR: [{ email }, { username }],
+    },
+  })
 
-  const existingUsername = await prisma.user.findUnique({ where: { username } })
-  if (existingUsername) throw new Error("Username already taken")
+  if (existingUser) {
+    throw new Error("User with this email or username already exists")
+  }
 
+  // Hash password
   const hashedPassword = await bcrypt.hash(password, 12)
 
   try {
@@ -37,12 +36,12 @@ export async function createUser(formData: FormData) {
         username,
         name,
         password: hashedPassword,
-        role,
+        role: role as "ADMIN" | "USER",
       },
     })
 
     revalidatePath("/admin/users")
-    return { success: true, message: "User created successfully!" }
+    return { success: true }
   } catch (error) {
     console.error("Database error:", error)
     throw new Error("Failed to create user. Please try again.")
@@ -50,45 +49,44 @@ export async function createUser(formData: FormData) {
 }
 
 export async function updateUser(userId: string, formData: FormData) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.email) throw new Error("Unauthorized")
-
-  // Get the actual admin user from database
-  const adminUser = await prisma.user.findUnique({ where: { email: session.user.email } })
-  if (!adminUser || adminUser.role !== "ADMIN") throw new Error("Unauthorized - Admin access required")
-
-  const name = formData.get("name") as string
-  const role = formData.get("role") as "USER" | "ADMIN"
+  const email = formData.get("email") as string
   const username = formData.get("username") as string
-  const password = formData.get("password") as string | null
+  const name = formData.get("name") as string
+  const role = formData.get("role") as string
 
-  if (!name || !role || !username) throw new Error("Required fields are missing")
+  if (!email || !username || !name || !role) {
+    throw new Error("All fields are required")
+  }
 
-  // Check if username already exists (but not for this user)
-  const existingUsername = await prisma.user.findUnique({ where: { username } })
-  if (existingUsername && (existingUsername as any).id !== userId) {
-    throw new Error("Username already taken")
+  // Check if email or username is already taken by another user
+  const existingUser = await prisma.user.findFirst({
+    where: {
+      AND: [
+        { id: { not: userId } },
+        {
+          OR: [{ email }, { username }],
+        },
+      ],
+    },
+  })
+
+  if (existingUser) {
+    throw new Error("Email or username is already taken")
   }
 
   try {
-    const updateData: any = { name, role, username }
-    let passwordChanged = false
-
-    if (password && password.trim() !== "") {
-      updateData.password = await bcrypt.hash(password, 12)
-      passwordChanged = true
-    }
-
     await prisma.user.update({
       where: { id: userId },
-      data: updateData,
+      data: {
+        email,
+        username,
+        name,
+        role: role as "ADMIN" | "USER",
+      },
     })
 
     revalidatePath("/admin/users")
-    return {
-      success: true,
-      message: "User updated successfully!",
-    }
+    return { success: true }
   } catch (error) {
     console.error("Database error:", error)
     throw new Error("Failed to update user. Please try again.")
@@ -96,21 +94,13 @@ export async function updateUser(userId: string, formData: FormData) {
 }
 
 export async function deleteUser(userId: string) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.email) throw new Error("Unauthorized")
-
-  // Get the actual admin user from database
-  const adminUser = await prisma.user.findUnique({ where: { email: session.user.email } })
-  if (!adminUser || adminUser.role !== "ADMIN") throw new Error("Unauthorized - Admin access required")
-
-  if (adminUser.id === userId) throw new Error("Cannot delete your own account")
-
   try {
-    await prisma.booking.deleteMany({ where: { userId } })
-    await prisma.user.delete({ where: { id: userId } })
+    await prisma.user.delete({
+      where: { id: userId },
+    })
 
     revalidatePath("/admin/users")
-    return { success: true, message: "User deleted successfully!" }
+    return { success: true }
   } catch (error) {
     console.error("Database error:", error)
     throw new Error("Failed to delete user. Please try again.")
