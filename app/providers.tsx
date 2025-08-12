@@ -4,23 +4,15 @@ import type React from "react"
 
 import { SessionProvider } from "next-auth/react"
 import { ThemeProvider } from "@/components/theme-provider"
-import { Toaster as SonnerToaster } from "@/components/ui/sonner"
-import { Toaster } from "@/components/ui/toaster"
+import { Toaster } from "@/components/ui/sonner"
 
-type ProvidersProps = {
-  children: React.ReactNode
-}
-
-export function Providers({ children }: ProvidersProps) {
+export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider>
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
         {children}
+        <Toaster />
       </ThemeProvider>
-
-      {/* Mount both toasters to support components using either shadcn/toast or sonner */}
-      <SonnerToaster position="top-right" richColors />
-      <Toaster />
     </SessionProvider>
   )
 }
