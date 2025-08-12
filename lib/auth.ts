@@ -8,47 +8,44 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: "credentials",
       credentials: {
-        username: { label: "Username", type: "text" },
-        email: { label: "Email", type: "email" },
+        identifier: { label: "Username or Email", type: "text" },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.password) {
-          console.log("No password provided")
+        if (!credentials?.identifier || !credentials?.password) {
           return null
         }
 
-        // Try to find user by username or email
-        const user = await prisma.user.findFirst({
-          where: {
-            OR: [
-              { username: credentials.username || credentials.email },
-              { email: credentials.email || credentials.username },
-            ],
-          },
-        })
+        try {
+          // Find user by username or email
+          const user = await prisma.user.findFirst({
+            where: {
+              OR: [{ username: credentials.identifier }, { email: credentials.identifier }],
+            },
+          })
 
-        console.log("Found user:", user ? { id: user.id, email: user.email, username: user.username } : "None")
+          if (!user || !user.password) {
+            return null
+          }
 
-        if (!user) {
-          console.log("User not found")
+          // Verify password
+          const isPasswordValid = await bcrypt.compare(credentials.password, user.password)
+
+          if (!isPasswordValid) {
+            return null
+          }
+
+          return {
+            id: user.id,
+            email: user.email,
+            username: user.username,
+            name: user.name,
+            role: user.role,
+            tokenVersion: user.tokenVersion,
+          }
+        } catch (error) {
+          console.error("Auth error:", error)
           return null
-        }
-
-        const isPasswordValid = await bcrypt.compare(credentials.password, user.password)
-        console.log("Password valid:", isPasswordValid)
-
-        if (!isPasswordValid) {
-          console.log("Invalid password")
-          return null
-        }
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          tokenVersion: user.tokenVersion,
         }
       },
     }),
@@ -57,18 +54,24 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.role = user.role
+        token.username = user.username
         token.tokenVersion = user.tokenVersion
       }
 
-      // Check if tokenVersion has changed (user password was changed)
-      if (token.sub) {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: token.sub },
-          select: { tokenVersion: true },
-        })
+      // Check if token version is still valid
+      if (token.sub && token.tokenVersion !== undefined) {
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: token.sub },
+            select: { tokenVersion: true },
+          })
 
-        if (dbUser && token.tokenVersion !== dbUser.tokenVersion) {
-          // Token is invalid, force logout
+          if (!dbUser || dbUser.tokenVersion !== token.tokenVersion) {
+            // Token is invalid, return null to force re-authentication
+            return {}
+          }
+        } catch (error) {
+          console.error("Token validation error:", error)
           return {}
         }
       }
@@ -79,7 +82,7 @@ export const authOptions: NextAuthOptions = {
       if (token) {
         session.user.id = token.sub!
         session.user.role = token.role as string
-        session.user.tokenVersion = token.tokenVersion as number
+        session.user.username = token.username as string
       }
       return session
     },

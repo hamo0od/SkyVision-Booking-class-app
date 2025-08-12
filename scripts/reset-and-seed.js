@@ -4,17 +4,16 @@ const bcrypt = require("bcryptjs")
 const prisma = new PrismaClient()
 
 async function main() {
-  console.log("🗑️  Deleting all users and bookings...")
+  console.log("🗑️  Deleting all existing data...")
 
-  // Delete all bookings first (foreign key constraint)
+  // Delete in correct order to avoid foreign key constraints
   await prisma.booking.deleteMany({})
-  console.log("✅ Deleted all bookings")
-
-  // Delete all users
   await prisma.user.deleteMany({})
-  console.log("✅ Deleted all users")
+  await prisma.classroom.deleteMany({})
 
-  console.log("🌱 Creating new users...")
+  console.log("✅ All data deleted")
+
+  console.log("🌱 Seeding database...")
 
   // Create admin user
   const adminPassword = await bcrypt.hash("password", 12)
@@ -28,7 +27,6 @@ async function main() {
       tokenVersion: 0,
     },
   })
-  console.log("✅ Created admin user:", { email: admin.email, username: admin.username })
 
   // Create regular user
   const userPassword = await bcrypt.hash("password", 12)
@@ -42,17 +40,38 @@ async function main() {
       tokenVersion: 0,
     },
   })
-  console.log("✅ Created regular user:", { email: user.email, username: user.username })
 
-  console.log("\n🎉 Seeding completed!")
-  console.log("\n📝 Login credentials:")
-  console.log("Admin: admin@example.com / password (or username: admin)")
-  console.log("User:  user@example.com / password (or username: user)")
+  // Create sample classrooms
+  const classroom1 = await prisma.classroom.create({
+    data: {
+      name: "Conference Room A",
+      capacity: 20,
+      description: "Large conference room with projector",
+    },
+  })
+
+  const classroom2 = await prisma.classroom.create({
+    data: {
+      name: "Training Room B",
+      capacity: 15,
+      description: "Training room with whiteboards",
+    },
+  })
+
+  console.log("✅ Database seeded successfully!")
+  console.log("")
+  console.log("🔑 Login credentials:")
+  console.log("Admin: admin@example.com / password")
+  console.log("User:  user@example.com / password")
+  console.log("")
+  console.log("Or use usernames:")
+  console.log("Admin: admin / password")
+  console.log("User:  user / password")
 }
 
 main()
   .catch((e) => {
-    console.error("❌ Error during seeding:", e)
+    console.error("❌ Seeding failed:", e)
     process.exit(1)
   })
   .finally(async () => {
