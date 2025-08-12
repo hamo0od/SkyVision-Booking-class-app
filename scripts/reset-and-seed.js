@@ -8,38 +8,45 @@ async function main() {
 
   // Delete in correct order to avoid foreign key constraints
   await prisma.booking.deleteMany({})
-  await prisma.user.deleteMany({})
-  await prisma.classroom.deleteMany({})
+  console.log("✅ Deleted all bookings")
 
-  console.log("✅ All data deleted")
+  await prisma.user.deleteMany({})
+  console.log("✅ Deleted all users")
+
+  await prisma.classroom.deleteMany({})
+  console.log("✅ Deleted all classrooms")
 
   console.log("🌱 Seeding database...")
 
+  // Hash passwords
+  const hashedPassword = await bcrypt.hash("password", 12)
+  console.log("Generated password hash")
+
   // Create admin user
-  const adminPassword = await bcrypt.hash("password", 12)
   const admin = await prisma.user.create({
     data: {
       email: "admin@example.com",
       username: "admin",
       name: "Admin User",
-      password: adminPassword,
+      password: hashedPassword,
       role: "ADMIN",
       tokenVersion: 0,
     },
   })
+  console.log("✅ Created admin user:", { id: admin.id, username: admin.username, email: admin.email })
 
   // Create regular user
-  const userPassword = await bcrypt.hash("password", 12)
   const user = await prisma.user.create({
     data: {
       email: "user@example.com",
       username: "user",
       name: "Regular User",
-      password: userPassword,
+      password: hashedPassword,
       role: "USER",
       tokenVersion: 0,
     },
   })
+  console.log("✅ Created regular user:", { id: user.id, username: user.username, email: user.email })
 
   // Create sample classrooms
   const classroom1 = await prisma.classroom.create({
@@ -58,15 +65,15 @@ async function main() {
     },
   })
 
-  console.log("✅ Database seeded successfully!")
-  console.log("")
-  console.log("🔑 Login credentials:")
-  console.log("Admin: admin@example.com / password")
-  console.log("User:  user@example.com / password")
-  console.log("")
-  console.log("Or use usernames:")
-  console.log("Admin: admin / password")
-  console.log("User:  user / password")
+  console.log("✅ Created sample classrooms")
+
+  console.log("\n🎉 Database seeded successfully!")
+  console.log("\n🔑 Login credentials:")
+  console.log("Username: admin | Password: password")
+  console.log("Username: user  | Password: password")
+  console.log("\nOr use emails:")
+  console.log("Email: admin@example.com | Password: password")
+  console.log("Email: user@example.com  | Password: password")
 }
 
 main()
