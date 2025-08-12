@@ -62,6 +62,7 @@ export async function createUser(formData: FormData) {
         name,
         password: hashedPassword,
         role,
+        tokenVersion: 0,
       },
     })
 
@@ -121,9 +122,14 @@ export async function updateUser(userId: string, formData: FormData) {
     }
   }
 
+  let passwordChanged = false
+
   // Only update password if provided
   if (password && password.trim() !== "") {
     updateData.password = await bcrypt.hash(password, 12)
+    // Increment tokenVersion to invalidate all existing sessions
+    updateData.tokenVersion = currentUser.tokenVersion + 1
+    passwordChanged = true
   }
 
   try {
@@ -135,10 +141,8 @@ export async function updateUser(userId: string, formData: FormData) {
     revalidatePath("/admin/users")
     return {
       success: true,
-      message:
-        password && password.trim() !== ""
-          ? "User updated and password changed successfully!"
-          : "User updated successfully!",
+      message: passwordChanged ? "User updated and password changed successfully!" : "User updated successfully!",
+      passwordChanged,
     }
   } catch (error) {
     console.error("Database error:", error)

@@ -1,15 +1,19 @@
-import { PrismaClient } from "@prisma/client"
-import bcrypt from "bcryptjs"
+const { PrismaClient } = require("@prisma/client")
+const bcrypt = require("bcryptjs")
 
 const prisma = new PrismaClient()
 
 async function resetAndSeed() {
   try {
-    console.log("🗑️  Deleting all bookings...")
-    await prisma.booking.deleteMany({})
+    console.log("🗑️  Deleting all bookings and users...")
 
-    console.log("🗑️  Deleting all users...")
+    // Delete all bookings first (foreign key constraint)
+    await prisma.booking.deleteMany({})
+    console.log("✅ Deleted all bookings")
+
+    // Delete all users
     await prisma.user.deleteMany({})
+    console.log("✅ Deleted all users")
 
     console.log("🌱 Creating fresh users...")
 
@@ -22,9 +26,10 @@ async function resetAndSeed() {
         name: "Admin User",
         password: adminPassword,
         role: "ADMIN",
+        tokenVersion: 0,
       },
     })
-    console.log("✅ Created admin user:", admin.username)
+    console.log("✅ Created admin user")
 
     // Create regular user
     const userPassword = await bcrypt.hash("password", 12)
@@ -35,17 +40,17 @@ async function resetAndSeed() {
         name: "Regular User",
         password: userPassword,
         role: "USER",
+        tokenVersion: 0,
       },
     })
-    console.log("✅ Created regular user:", user.username)
+    console.log("✅ Created regular user")
 
-    console.log("🎉 Reset and seed completed successfully!")
-    console.log("Login credentials:")
+    console.log("\n🎉 Database reset complete!")
+    console.log("\n📝 Login credentials:")
     console.log("Admin: admin@example.com / password")
-    console.log("User: user@example.com / password")
+    console.log("User:  user@example.com / password")
   } catch (error) {
-    console.error("❌ Error during reset and seed:", error)
-    throw error
+    console.error("❌ Error resetting database:", error)
   } finally {
     await prisma.$disconnect()
   }

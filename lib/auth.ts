@@ -40,27 +40,40 @@ export const authOptions: NextAuthOptions = {
           name: user.name,
           username: user.username,
           role: user.role,
+          tokenVersion: user.tokenVersion,
         }
       },
     }),
   ],
   session: {
     strategy: "jwt",
-    // Session expires after 8 hours of inactivity
-    maxAge: 8 * 60 * 60, // 8 hours in seconds
-    // Update session expiry on every request (sliding session)
+    maxAge: 8 * 60 * 60, // 8 hours
     updateAge: 60 * 60, // Update every hour
   },
   jwt: {
-    // JWT expires after 8 hours
-    maxAge: 8 * 60 * 60, // 8 hours in seconds
+    maxAge: 8 * 60 * 60, // 8 hours
   },
   callbacks: {
     jwt: async ({ token, user }) => {
       if (user) {
         token.role = user.role
         token.username = user.username
+        token.tokenVersion = user.tokenVersion
       }
+
+      // Check if token is still valid by comparing tokenVersion
+      if (token.sub && token.tokenVersion !== undefined) {
+        const currentUser = await prisma.user.findUnique({
+          where: { id: token.sub },
+          select: { tokenVersion: true },
+        })
+
+        // If tokenVersion doesn't match, invalidate the token
+        if (!currentUser || currentUser.tokenVersion !== token.tokenVersion) {
+          return null
+        }
+      }
+
       return token
     },
     session: async ({ session, token }) => {
@@ -68,15 +81,14 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.sub
         session.user.role = token.role
         session.user.username = token.username
+        session.user.tokenVersion = token.tokenVersion
       }
       return session
     },
     redirect: async ({ url, baseUrl }) => {
-      // Handle logout redirects
       if (url.startsWith("/")) {
         return `${baseUrl}${url}`
       }
-      // For production, use the actual domain
       if (url.startsWith(baseUrl)) {
         return url
       }
