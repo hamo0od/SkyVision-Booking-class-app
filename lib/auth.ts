@@ -1,21 +1,31 @@
 import type { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { prisma } from "@/lib/db"
+import { prisma } from "./db"
 import bcrypt from "bcryptjs"
+import { rateLimit } from "./security"
 
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: "credentials",
       credentials: {
-        username: { label: "Username", type: "text" },
+        username: { label: "Username or Email", type: "text" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
-        console.log("Auth attempt with:", credentials?.username)
+      async authorize(credentials, req) {
+        console.log("🔐 Auth attempt:", { username: credentials?.username })
 
         if (!credentials?.username || !credentials?.password) {
-          console.log("Missing credentials")
+          console.log("❌ Missing credentials")
+          return null
+        }
+
+        // Rate limiting
+        const ip = (req?.headers?.["x-forwarded-for"] as string) || "unknown"
+        const rateLimitResult = rateLimit(`auth:${ip}`, 5, 15 * 60 * 1000)
+
+        if (!rateLimitResult.success) {
+          console.log("❌ Rate limit exceeded for IP:", ip)
           return null
         }
 
@@ -27,23 +37,22 @@ export const authOptions: NextAuthOptions = {
             },
           })
 
-          console.log("Found user:", user ? { id: user.id, username: user.username, email: user.email } : "none")
+          console.log("👤 User found:", user ? "Yes" : "No")
 
-          if (!user || !user.password) {
-            console.log("User not found or no password")
+          if (!user) {
             return null
           }
 
-          // Verify password
-          const isPasswordValid = await bcrypt.compare(credentials.password, user.password)
-          console.log("Password valid:", isPasswordValid)
+          // Check password
+          const isValidPassword = await bcrypt.compare(credentials.password, user.password)
+          console.log("🔑 Password valid:", isValidPassword)
 
-          if (!isPasswordValid) {
-            console.log("Invalid password")
+          if (!isValidPassword) {
             return null
           }
 
-          console.log("Auth successful for:", user.username)
+          console.log("✅ Login successful for:", user.username)
+
           return {
             id: user.id,
             email: user.email,
@@ -53,7 +62,7 @@ export const authOptions: NextAuthOptions = {
             tokenVersion: user.tokenVersion,
           }
         } catch (error) {
-          console.error("Auth error:", error)
+          console.error("❌ Auth error:", error)
           return null
         }
       },
@@ -61,44 +70,42 @@ export const authOptions: NextAuthOptions = {
   ],
   session: {
     strategy: "jwt",
-    maxAge: 24 * 60 * 60, // 24 hours
-  },
-  jwt: {
-    maxAge: 24 * 60 * 60, // 24 hours
   },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role = user.role
+        token.id = user.id
         token.username = user.username
+        token.role = user.role
         token.tokenVersion = user.tokenVersion
       }
 
-      // Check if token version is still valid (for password change logout)
-      if (token.sub && token.tokenVersion !== undefined) {
+      // Check if token version is still valid
+      if (token.id && token.tokenVersion !== undefined) {
         try {
           const dbUser = await prisma.user.findUnique({
-            where: { id: token.sub },
+            where: { id: token.id as string },
             select: { tokenVersion: true },
           })
 
           if (!dbUser || dbUser.tokenVersion !== token.tokenVersion) {
-            console.log("Token version mismatch, invalidating session")
-            return {}
+            console.log("🔄 Token version mismatch, invalidating session")
+            return null
           }
         } catch (error) {
-          console.error("Token validation error:", error)
-          return {}
+          console.error("Error checking token version:", error)
+          return null
         }
       }
 
       return token
     },
     async session({ session, token }) {
-      if (token && token.sub) {
-        session.user.id = token.sub
-        session.user.role = token.role as string
+      if (token) {
+        session.user.id = token.id as string
         session.user.username = token.username as string
+        session.user.role = token.role as string
+        session.user.tokenVersion = token.tokenVersion as number
       }
       return session
     },

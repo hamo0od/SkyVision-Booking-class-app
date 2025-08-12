@@ -71,6 +71,19 @@ export function sanitizeInput(input: string): string {
     .trim()
 }
 
+// Sanitize form data
+export function sanitizeFormData(formData: FormData): Record<string, string> {
+  const sanitized: Record<string, string> = {}
+
+  for (const [key, value] of formData.entries()) {
+    if (typeof value === "string") {
+      sanitized[key] = sanitizeInput(value)
+    }
+  }
+
+  return sanitized
+}
+
 export function validateEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   return emailRegex.test(email)

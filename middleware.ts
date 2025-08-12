@@ -5,6 +5,7 @@ import { rateLimit, getClientIP } from "@/lib/security"
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+  const response = NextResponse.next()
 
   // Apply rate limiting to auth endpoints
   if (pathname.startsWith("/api/auth/callback/credentials")) {
@@ -30,15 +31,7 @@ export async function middleware(request: NextRequest) {
     const rateLimitResult = rateLimit(`api:${clientIP}`, 100, 60 * 1000) // 100 requests per minute
 
     if (!rateLimitResult.success) {
-      return NextResponse.json(
-        { error: "Rate limit exceeded" },
-        {
-          status: 429,
-          headers: {
-            "Retry-After": Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000).toString(),
-          },
-        },
-      )
+      return new NextResponse("Rate limit exceeded", { status: 429 })
     }
   }
 
@@ -47,7 +40,7 @@ export async function middleware(request: NextRequest) {
   const isProtectedPath = protectedPaths.some((path) => pathname.startsWith(path))
 
   if (isProtectedPath) {
-    const token = await getToken({ req: request })
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
 
     if (!token) {
       const url = request.nextUrl.clone()
@@ -65,8 +58,6 @@ export async function middleware(request: NextRequest) {
   }
 
   // Security headers
-  const response = NextResponse.next()
-
   response.headers.set("X-XSS-Protection", "1; mode=block")
   response.headers.set("X-Frame-Options", "DENY")
   response.headers.set("X-Content-Type-Options", "nosniff")
