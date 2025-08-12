@@ -14,67 +14,45 @@ async function main() {
   await prisma.user.deleteMany({})
   console.log("✅ Deleted all users")
 
-  console.log("🌱 Creating fresh users...")
-
-  // Hash password with same method as your app
-  const hashedPassword = await bcrypt.hash("password", 12)
-  console.log("Generated hash:", hashedPassword)
+  console.log("🌱 Creating new users...")
 
   // Create admin user
+  const adminPassword = await bcrypt.hash("password", 12)
   const admin = await prisma.user.create({
     data: {
       email: "admin@example.com",
       username: "admin",
-      password: hashedPassword,
       name: "Admin User",
+      password: adminPassword,
       role: "ADMIN",
       tokenVersion: 0,
     },
   })
-  console.log("✅ Created admin:", { id: admin.id, username: admin.username, email: admin.email })
+  console.log("✅ Created admin user:", { email: admin.email, username: admin.username })
 
   // Create regular user
+  const userPassword = await bcrypt.hash("password", 12)
   const user = await prisma.user.create({
     data: {
       email: "user@example.com",
       username: "user",
-      password: hashedPassword,
       name: "Regular User",
+      password: userPassword,
       role: "USER",
       tokenVersion: 0,
     },
   })
-  console.log("✅ Created user:", { id: user.id, username: user.username, email: user.email })
+  console.log("✅ Created regular user:", { email: user.email, username: user.username })
 
-  // Verify the users were created correctly
-  const allUsers = await prisma.user.findMany({
-    select: {
-      id: true,
-      username: true,
-      email: true,
-      role: true,
-      tokenVersion: true,
-      password: true,
-    },
-  })
-
-  console.log("\n📋 All users in database:")
-  allUsers.forEach((u) => {
-    console.log(`- ${u.username} (${u.email}) - Role: ${u.role} - TokenVersion: ${u.tokenVersion}`)
-    console.log(`  Password hash: ${u.password.substring(0, 20)}...`)
-  })
-
-  console.log("\n🔑 Login credentials:")
-  console.log("Username: admin | Password: password")
-  console.log("Username: user  | Password: password")
-  console.log("\nOr use emails:")
-  console.log("Email: admin@example.com | Password: password")
-  console.log("Email: user@example.com  | Password: password")
+  console.log("\n🎉 Seeding completed!")
+  console.log("\n📝 Login credentials:")
+  console.log("Admin: admin@example.com / password (or username: admin)")
+  console.log("User:  user@example.com / password (or username: user)")
 }
 
 main()
   .catch((e) => {
-    console.error("❌ Error:", e)
+    console.error("❌ Error during seeding:", e)
     process.exit(1)
   })
   .finally(async () => {

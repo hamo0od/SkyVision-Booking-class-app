@@ -1,10 +1,9 @@
--- Reset users table by deleting all users and their related data
--- Delete bookings first to avoid foreign key constraint issues
-DELETE FROM "Booking" WHERE "userId" IS NOT NULL;
+-- Delete all bookings first (foreign key constraint)
+DELETE FROM bookings;
 
 -- Delete all users
-DELETE FROM "User";
+DELETE FROM users;
 
--- Verify deletion
-SELECT COUNT(*) as remaining_users FROM "User";
-SELECT COUNT(*) as remaining_bookings FROM "Booking";
+-- Reset sequences if needed
+ALTER SEQUENCE IF EXISTS users_id_seq RESTART WITH 1;
+ALTER SEQUENCE IF EXISTS bookings_id_seq RESTART WITH 1;

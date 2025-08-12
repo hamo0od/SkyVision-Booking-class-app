@@ -9,27 +9,29 @@ export const authOptions: NextAuthOptions = {
       name: "credentials",
       credentials: {
         username: { label: "Username", type: "text" },
+        email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        console.log("Auth attempt with:", { username: credentials?.username })
-
-        if (!credentials?.username || !credentials?.password) {
-          console.log("Missing credentials")
+        if (!credentials?.password) {
+          console.log("No password provided")
           return null
         }
 
-        // Try to find user by email or username
+        // Try to find user by username or email
         const user = await prisma.user.findFirst({
           where: {
-            OR: [{ email: credentials.username }, { username: credentials.username }],
+            OR: [
+              { username: credentials.username || credentials.email },
+              { email: credentials.email || credentials.username },
+            ],
           },
         })
 
-        console.log("Found user:", user ? { id: user.id, username: user.username, email: user.email } : "none")
+        console.log("Found user:", user ? { id: user.id, email: user.email, username: user.username } : "None")
 
-        if (!user || !user.password) {
-          console.log("User not found or no password")
+        if (!user) {
+          console.log("User not found")
           return null
         }
 
@@ -41,12 +43,10 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
-        console.log("Auth successful for user:", user.username)
         return {
           id: user.id,
           email: user.email,
           name: user.name,
-          username: user.username,
           role: user.role,
           tokenVersion: user.tokenVersion,
         }
@@ -57,21 +57,19 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.role = user.role
-        token.username = user.username
         token.tokenVersion = user.tokenVersion
       }
 
-      // Check if tokenVersion is still valid
-      if (token.email) {
+      // Check if tokenVersion has changed (user password was changed)
+      if (token.sub) {
         const dbUser = await prisma.user.findUnique({
-          where: { email: token.email },
+          where: { id: token.sub },
           select: { tokenVersion: true },
         })
 
-        // If tokenVersion doesn't match, invalidate the token
-        if (!dbUser || dbUser.tokenVersion !== token.tokenVersion) {
-          console.log("Token version mismatch, invalidating session")
-          return null
+        if (dbUser && token.tokenVersion !== dbUser.tokenVersion) {
+          // Token is invalid, force logout
+          return {}
         }
       }
 
@@ -81,7 +79,6 @@ export const authOptions: NextAuthOptions = {
       if (token) {
         session.user.id = token.sub!
         session.user.role = token.role as string
-        session.user.username = token.username as string
         session.user.tokenVersion = token.tokenVersion as number
       }
       return session
@@ -93,5 +90,4 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
   },
-  debug: true, // Enable debug logs
 }
