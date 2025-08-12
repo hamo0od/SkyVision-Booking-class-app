@@ -12,7 +12,10 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
+        console.log("Auth attempt with:", credentials?.username)
+
         if (!credentials?.username || !credentials?.password) {
+          console.log("Missing credentials")
           return null
         }
 
@@ -24,17 +27,23 @@ export const authOptions: NextAuthOptions = {
             },
           })
 
-          if (!user) {
+          console.log("Found user:", user ? { id: user.id, username: user.username, email: user.email } : "none")
+
+          if (!user || !user.password) {
+            console.log("User not found or no password")
             return null
           }
 
           // Verify password
           const isPasswordValid = await bcrypt.compare(credentials.password, user.password)
+          console.log("Password valid:", isPasswordValid)
 
           if (!isPasswordValid) {
+            console.log("Invalid password")
             return null
           }
 
+          console.log("Auth successful for:", user.username)
           return {
             id: user.id,
             email: user.email,
@@ -65,16 +74,16 @@ export const authOptions: NextAuthOptions = {
         token.tokenVersion = user.tokenVersion
       }
 
-      // Check if token version is still valid
-      if (token.email && token.tokenVersion !== undefined) {
+      // Check if token version is still valid (for password change logout)
+      if (token.sub && token.tokenVersion !== undefined) {
         try {
           const dbUser = await prisma.user.findUnique({
-            where: { email: token.email as string },
+            where: { id: token.sub },
             select: { tokenVersion: true },
           })
 
-          // If tokenVersion doesn't match, invalidate the token
           if (!dbUser || dbUser.tokenVersion !== token.tokenVersion) {
+            console.log("Token version mismatch, invalidating session")
             return {}
           }
         } catch (error) {
@@ -86,8 +95,8 @@ export const authOptions: NextAuthOptions = {
       return token
     },
     async session({ session, token }) {
-      if (token) {
-        session.user.id = token.sub as string
+      if (token && token.sub) {
+        session.user.id = token.sub
         session.user.role = token.role as string
         session.user.username = token.username as string
       }
@@ -97,5 +106,5 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: "/auth/signin",
   },
-  debug: process.env.NODE_ENV === "development",
+  debug: true,
 }

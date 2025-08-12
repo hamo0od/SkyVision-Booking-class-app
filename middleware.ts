@@ -1,11 +1,72 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
-import { getClientIP, authRateLimiter, generalRateLimiter } from "./lib/security"
+import { getToken } from "next-auth/jwt"
+import { rateLimit, getClientIP } from "@/lib/security"
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl
+
+  // Apply rate limiting to auth endpoints
+  if (pathname.startsWith("/api/auth/callback/credentials")) {
+    const clientIP = getClientIP(request)
+    const rateLimitResult = rateLimit(`auth:${clientIP}`, 5, 15 * 60 * 1000) // 5 attempts per 15 minutes
+
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { error: "Too many login attempts. Please try again later." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000).toString(),
+          },
+        },
+      )
+    }
+  }
+
+  // Apply general rate limiting to API routes
+  if (pathname.startsWith("/api/") && !pathname.startsWith("/api/auth/")) {
+    const clientIP = getClientIP(request)
+    const rateLimitResult = rateLimit(`api:${clientIP}`, 100, 60 * 1000) // 100 requests per minute
+
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded" },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000).toString(),
+          },
+        },
+      )
+    }
+  }
+
+  // Protected routes
+  const protectedPaths = ["/dashboard", "/admin", "/timeline"]
+  const isProtectedPath = protectedPaths.some((path) => pathname.startsWith(path))
+
+  if (isProtectedPath) {
+    const token = await getToken({ req: request })
+
+    if (!token) {
+      const url = request.nextUrl.clone()
+      url.pathname = "/auth/signin"
+      url.searchParams.set("callbackUrl", pathname)
+      return NextResponse.redirect(url)
+    }
+
+    // Admin-only routes
+    if (pathname.startsWith("/admin") && token.role !== "ADMIN") {
+      const url = request.nextUrl.clone()
+      url.pathname = "/dashboard"
+      return NextResponse.redirect(url)
+    }
+  }
+
+  // Security headers
   const response = NextResponse.next()
 
-  // Add security headers
   response.headers.set("X-XSS-Protection", "1; mode=block")
   response.headers.set("X-Frame-Options", "DENY")
   response.headers.set("X-Content-Type-Options", "nosniff")
@@ -15,38 +76,9 @@ export function middleware(request: NextRequest) {
     "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;",
   )
 
-  const clientIP = getClientIP(request)
-  const pathname = request.nextUrl.pathname
-
-  // Rate limiting for auth endpoints
-  if (pathname.startsWith("/api/auth/") || pathname.startsWith("/auth/")) {
-    if (!authRateLimiter.isAllowed(clientIP)) {
-      return new NextResponse(JSON.stringify({ error: "Too many authentication attempts. Please try again later." }), {
-        status: 429,
-        headers: {
-          "Content-Type": "application/json",
-          "Retry-After": "900", // 15 minutes
-        },
-      })
-    }
-  }
-
-  // General rate limiting for API routes
-  if (pathname.startsWith("/api/")) {
-    if (!generalRateLimiter.isAllowed(clientIP)) {
-      return new NextResponse(JSON.stringify({ error: "Rate limit exceeded. Please slow down." }), {
-        status: 429,
-        headers: {
-          "Content-Type": "application/json",
-          "Retry-After": "60",
-        },
-      })
-    }
-  }
-
   return response
 }
 
 export const config = {
-  matcher: ["/api/:path*", "/auth/:path*", "/admin/:path*", "/dashboard/:path*"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|public/).*)"],
 }
