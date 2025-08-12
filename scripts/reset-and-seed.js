@@ -3,57 +3,62 @@ const bcrypt = require("bcryptjs")
 
 const prisma = new PrismaClient()
 
-async function resetAndSeed() {
-  try {
-    console.log("🗑️  Deleting all bookings and users...")
+async function main() {
+  console.log("🗑️  Deleting all users and bookings...")
 
-    // Delete all bookings first (foreign key constraint)
-    await prisma.booking.deleteMany({})
-    console.log("✅ Deleted all bookings")
+  // Delete all bookings first (foreign key constraint)
+  await prisma.booking.deleteMany({})
+  console.log("✅ Deleted all bookings")
 
-    // Delete all users
-    await prisma.user.deleteMany({})
-    console.log("✅ Deleted all users")
+  // Delete all users
+  await prisma.user.deleteMany({})
+  console.log("✅ Deleted all users")
 
-    console.log("🌱 Creating fresh users...")
+  console.log("🌱 Creating fresh users...")
 
-    // Create admin user
-    const adminPassword = await bcrypt.hash("password", 12)
-    const admin = await prisma.user.create({
-      data: {
-        email: "admin@example.com",
-        username: "admin",
-        name: "Admin User",
-        password: adminPassword,
-        role: "ADMIN",
-        tokenVersion: 0,
-      },
-    })
-    console.log("✅ Created admin user")
+  // Hash password
+  const hashedPassword = await bcrypt.hash("password", 12)
 
-    // Create regular user
-    const userPassword = await bcrypt.hash("password", 12)
-    const user = await prisma.user.create({
-      data: {
-        email: "user@example.com",
-        username: "user",
-        name: "Regular User",
-        password: userPassword,
-        role: "USER",
-        tokenVersion: 0,
-      },
-    })
-    console.log("✅ Created regular user")
+  // Create admin user
+  const admin = await prisma.user.create({
+    data: {
+      email: "admin@example.com",
+      username: "admin",
+      password: hashedPassword,
+      name: "Admin User",
+      role: "ADMIN",
+      tokenVersion: 0,
+    },
+  })
 
-    console.log("\n🎉 Database reset complete!")
-    console.log("\n📝 Login credentials:")
-    console.log("Admin: admin@example.com / password")
-    console.log("User:  user@example.com / password")
-  } catch (error) {
-    console.error("❌ Error resetting database:", error)
-  } finally {
-    await prisma.$disconnect()
-  }
+  // Create regular user
+  const user = await prisma.user.create({
+    data: {
+      email: "user@example.com",
+      username: "user",
+      password: hashedPassword,
+      name: "Regular User",
+      role: "USER",
+      tokenVersion: 0,
+    },
+  })
+
+  console.log("✅ Database reset and seeded successfully!")
+  console.log("")
+  console.log("🔑 Login credentials:")
+  console.log("Admin: admin@example.com / password")
+  console.log("User:  user@example.com / password")
+  console.log("")
+  console.log("Or use usernames:")
+  console.log("Admin: admin / password")
+  console.log("User:  user / password")
 }
 
-resetAndSeed()
+main()
+  .catch((e) => {
+    console.error("❌ Error:", e)
+    process.exit(1)
+  })
+  .finally(async () => {
+    await prisma.$disconnect()
+  })
