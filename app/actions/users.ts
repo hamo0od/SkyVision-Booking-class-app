@@ -62,8 +62,6 @@ export async function createUser(formData: FormData) {
         name,
         password: hashedPassword,
         role,
-        tokenVersion: 0,
-        passwordUpdatedAt: new Date(),
       },
     })
 
@@ -96,31 +94,39 @@ export async function updateUser(userId: string, formData: FormData) {
   const username = formData.get("username") as string
   const password = formData.get("password") as string | null
 
-  if (!name || !role || !username) {
-    throw new Error("Required fields are missing")
+  // Get current user data to fill in missing fields
+  const currentUser = await prisma.user.findUnique({
+    where: { id: userId },
+  })
+
+  if (!currentUser) {
+    throw new Error("User not found")
+  }
+
+  // Use current values if not provided in form
+  const updateData: any = {
+    name: name || currentUser.name,
+    role: role || currentUser.role,
+    username: username || currentUser.username,
   }
 
   // Check if username already exists (but not for this user)
-  const existingUsername = await prisma.user.findUnique({
-    where: { username },
-  })
+  if (username && username !== currentUser.username) {
+    const existingUsername = await prisma.user.findUnique({
+      where: { username },
+    })
 
-  if (existingUsername && existingUsername.id !== userId) {
-    throw new Error("Username already taken")
+    if (existingUsername && existingUsername.id !== userId) {
+      throw new Error("Username already taken")
+    }
+  }
+
+  // Only update password if provided
+  if (password && password.trim() !== "") {
+    updateData.password = await bcrypt.hash(password, 12)
   }
 
   try {
-    const updateData: any = { name, role, username }
-    let passwordChanged = false
-
-    // Only update password if provided
-    if (password && password.trim() !== "") {
-      updateData.password = await bcrypt.hash(password, 12)
-      updateData.passwordUpdatedAt = new Date()
-      updateData.tokenVersion = { increment: 1 } // This will invalidate all existing sessions for this user
-      passwordChanged = true
-    }
-
     await prisma.user.update({
       where: { id: userId },
       data: updateData,
@@ -129,10 +135,10 @@ export async function updateUser(userId: string, formData: FormData) {
     revalidatePath("/admin/users")
     return {
       success: true,
-      message: passwordChanged
-        ? "Password changed successfully. The user has been logged out."
-        : "User updated successfully!",
-      passwordChanged,
+      message:
+        password && password.trim() !== ""
+          ? "User updated and password changed successfully!"
+          : "User updated successfully!",
     }
   } catch (error) {
     console.error("Database error:", error)

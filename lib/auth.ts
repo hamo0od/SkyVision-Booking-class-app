@@ -21,15 +21,6 @@ export const authOptions: NextAuthOptions = {
           where: {
             OR: [{ username: credentials.username }, { email: credentials.username }],
           },
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            username: true,
-            role: true,
-            password: true,
-            tokenVersion: true,
-          },
         })
 
         if (!user || !user.password) {
@@ -49,7 +40,6 @@ export const authOptions: NextAuthOptions = {
           name: user.name,
           username: user.username,
           role: user.role,
-          tokenVersion: user.tokenVersion || 0,
         }
       },
     }),
@@ -70,30 +60,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.role = user.role
         token.username = user.username
-        token.tokenVersion = (user as any).tokenVersion || 0
       }
-
-      // Check if the user's session should be invalidated
-      if (token?.sub) {
-        try {
-          const dbUser = await prisma.user.findUnique({
-            where: { id: token.sub },
-            select: { tokenVersion: true },
-          })
-
-          const currentTokenVersion = dbUser?.tokenVersion || 0
-          const jwtTokenVersion = (token as any).tokenVersion || 0
-
-          // If token versions don't match, invalidate the session
-          if (currentTokenVersion !== jwtTokenVersion) {
-            return null
-          }
-        } catch (error) {
-          // If there's an error checking the token version, invalidate the session
-          return null
-        }
-      }
-
       return token
     },
     session: async ({ session, token }) => {

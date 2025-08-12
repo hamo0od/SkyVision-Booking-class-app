@@ -54,22 +54,21 @@ export function UsersList({ users, currentUserId }: UsersListProps) {
         formData.append("password", editForm.password)
       }
 
-      const result = (await updateUser(userId, formData)) as {
+      const res = (await updateUser(userId, formData)) as {
         success: boolean
         message: string
         passwordChanged?: boolean
       }
-
       setEditingUser(null)
 
       toast({
-        title: result.passwordChanged ? "Password Changed Successfully" : "User Updated",
-        description: result.message,
-        variant: result.passwordChanged ? "default" : "default",
+        title: res?.passwordChanged ? "Password changed successfully" : "User updated",
+        description:
+          res?.message ?? (res?.passwordChanged ? "The user will be signed out immediately." : "Changes saved."),
       })
     } catch (error) {
       toast({
-        title: "Update Failed",
+        title: "Update failed",
         description: error instanceof Error ? error.message : "Failed to update user",
         variant: "destructive",
       })
@@ -82,13 +81,10 @@ export function UsersList({ users, currentUserId }: UsersListProps) {
     if (confirm(`Are you sure you want to delete ${userName}? This will also delete all their bookings.`)) {
       try {
         await deleteUser(userId)
-        toast({
-          title: "User Deleted",
-          description: `${userName} and their bookings have been removed.`,
-        })
+        toast({ title: "User deleted", description: `${userName} and their bookings were removed.` })
       } catch (error) {
         toast({
-          title: "Delete Failed",
+          title: "Deletion failed",
           description: error instanceof Error ? error.message : "Failed to delete user",
           variant: "destructive",
         })
@@ -191,11 +187,11 @@ export function UsersList({ users, currentUserId }: UsersListProps) {
             {editingUser === user.id && (
               <div className="pt-2 border-t border-gray-100 space-y-3">
                 <div>
-                  <label htmlFor={`username-${user.id}`} className="block text-sm font-medium text-gray-700">
+                  <label htmlFor={"username-" + user.id} className="block text-sm font-medium text-gray-700">
                     Username
                   </label>
                   <Input
-                    id={`username-${user.id}`}
+                    id={"username-" + user.id}
                     placeholder="Username"
                     value={editForm.username}
                     onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
@@ -203,11 +199,11 @@ export function UsersList({ users, currentUserId }: UsersListProps) {
                   />
                 </div>
                 <div>
-                  <label htmlFor={`password-${user.id}`} className="block text-sm font-medium text-gray-700">
+                  <label htmlFor={"password-" + user.id} className="block text-sm font-medium text-gray-700">
                     New Password
                   </label>
                   <Input
-                    id={`password-${user.id}`}
+                    id={"password-" + user.id}
                     type="password"
                     autoComplete="new-password"
                     placeholder="Set a new password (optional)"
@@ -215,9 +211,7 @@ export function UsersList({ users, currentUserId }: UsersListProps) {
                     onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
                     className="mt-1"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Leave blank to keep current password. Changing password will log out the user immediately.
-                  </p>
+                  <p className="text-xs text-gray-500 mt-1">Leave blank to keep the current password.</p>
                 </div>
               </div>
             )}
