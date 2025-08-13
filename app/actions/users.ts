@@ -1,21 +1,36 @@
 "use server"
 
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/db"
-import { revalidatePath } from "next/cache"
 import bcrypt from "bcryptjs"
-import { sanitizeFormData, validateEmail, validateUsername, validateName, validatePassword } from "@/lib/security"
+import { revalidatePath } from "next/cache"
+import {
+  sanitizeInput,
+  validateEmail,
+  validateUsername,
+  validateName,
+  validatePassword,
+  rateLimit,
+} from "@/lib/security"
+import { headers } from "next/headers"
 
 export async function createUser(formData: FormData) {
-  const session = await getServerSession(authOptions)
+  // Get client IP for rate limiting
+  const headersList = headers()
+  const forwarded = headersList.get("x-forwarded-for")
+  const clientIP = forwarded ? forwarded.split(",")[0].trim() : "unknown"
 
-  if (!session?.user?.role || session.user.role !== "ADMIN") {
-    throw new Error("Unauthorized")
+  // Rate limiting
+  const rateLimitResult = rateLimit(`create_user:${clientIP}`, 3, 60 * 1000) // 3 attempts per minute
+  if (!rateLimitResult.success) {
+    throw new Error("Too many requests. Please try again later.")
   }
 
-  const sanitized = sanitizeFormData(formData)
-  const { email, username, name, password, role } = sanitized
+  // Sanitize and validate inputs
+  const email = sanitizeInput(formData.get("email") as string)
+  const username = sanitizeInput(formData.get("username") as string)
+  const name = sanitizeInput(formData.get("name") as string)
+  const password = formData.get("password") as string
+  const role = sanitizeInput(formData.get("role") as string)
 
   // Validation
   if (!email || !username || !name || !password || !role) {
@@ -31,7 +46,7 @@ export async function createUser(formData: FormData) {
   }
 
   if (!validateName(name)) {
-    throw new Error("Name must be 2-50 characters and contain only letters, spaces, hyphens, and apostrophes")
+    throw new Error("Name must be 2-50 characters and contain only letters, numbers, spaces, hyphens, and apostrophes")
   }
 
   if (!validatePassword(password)) {
@@ -51,18 +66,25 @@ export async function createUser(formData: FormData) {
     })
 
     if (existingUser) {
-      throw new Error("Email or username already exists")
+      if (existingUser.email === email) {
+        throw new Error("Email already exists")
+      }
+      if (existingUser.username === username) {
+        throw new Error("Username already exists")
+      }
     }
 
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 12)
 
+    // Create user
     await prisma.user.create({
       data: {
         email,
         username,
         name,
         password: hashedPassword,
-        role,
+        role: role as "USER" | "ADMIN",
         tokenVersion: 0,
       },
     })
@@ -71,18 +93,24 @@ export async function createUser(formData: FormData) {
     return { success: true, message: "User created successfully" }
   } catch (error) {
     console.error("Database error:", error)
+    if (error instanceof Error) {
+      throw error
+    }
     throw new Error("Failed to create user. Please try again.")
   }
 }
 
 export async function updateUser(userId: string, formData: FormData) {
-  const session = await getServerSession(authOptions)
+  // Get client IP for rate limiting
+  const headersList = headers()
+  const forwarded = headersList.get("x-forwarded-for")
+  const clientIP = forwarded ? forwarded.split(",")[0].trim() : "unknown"
 
-  if (!session?.user?.role || session.user.role !== "ADMIN") {
-    throw new Error("Unauthorized")
+  // Rate limiting
+  const rateLimitResult = rateLimit(`update_user:${clientIP}`, 10, 60 * 1000) // 10 attempts per minute
+  if (!rateLimitResult.success) {
+    throw new Error("Too many requests. Please try again later.")
   }
-
-  const sanitized = sanitizeFormData(formData)
 
   try {
     // Get current user data
@@ -94,49 +122,52 @@ export async function updateUser(userId: string, formData: FormData) {
       throw new Error("User not found")
     }
 
-    // Use existing values if not provided
-    const email = sanitized.email || currentUser.email
-    const username = sanitized.username || currentUser.username
-    const name = sanitized.name || currentUser.name
-    const role = sanitized.role || currentUser.role
-    const password = sanitized.password
+    // Sanitize inputs
+    const email = sanitizeInput(formData.get("email") as string) || currentUser.email
+    const username = sanitizeInput(formData.get("username") as string) || currentUser.username
+    const name = sanitizeInput(formData.get("name") as string) || currentUser.name
+    const role = sanitizeInput(formData.get("role") as string) || currentUser.role
+    const password = formData.get("password") as string
 
-    // Validation for provided fields
-    if (sanitized.email && !validateEmail(email)) {
+    // Validate inputs
+    if (!validateEmail(email)) {
       throw new Error("Invalid email format")
     }
 
-    if (sanitized.username && !validateUsername(username)) {
+    if (!validateUsername(username)) {
       throw new Error("Username must be 3-20 characters and contain only letters, numbers, and underscores")
     }
 
-    if (sanitized.name && !validateName(name)) {
-      throw new Error("Name must be 2-50 characters and contain only letters, spaces, hyphens, and apostrophes")
+    if (!validateName(name)) {
+      throw new Error(
+        "Name must be 2-50 characters and contain only letters, numbers, spaces, hyphens, and apostrophes",
+      )
     }
 
-    if (password && !validatePassword(password)) {
-      throw new Error("Password must be 6-128 characters long")
-    }
-
-    if (sanitized.role && !["USER", "ADMIN"].includes(role)) {
+    if (!["USER", "ADMIN"].includes(role)) {
       throw new Error("Invalid role")
     }
 
     // Check if email or username is already taken by another user
-    if (sanitized.email || sanitized.username) {
+    if (email !== currentUser.email || username !== currentUser.username) {
       const existingUser = await prisma.user.findFirst({
         where: {
           AND: [
             { id: { not: userId } },
             {
-              OR: [...(sanitized.email ? [{ email }] : []), ...(sanitized.username ? [{ username }] : [])],
+              OR: [{ email }, { username }],
             },
           ],
         },
       })
 
       if (existingUser) {
-        throw new Error("Email or username already exists")
+        if (existingUser.email === email) {
+          throw new Error("Email already exists")
+        }
+        if (existingUser.username === username) {
+          throw new Error("Username already exists")
+        }
       }
     }
 
@@ -145,18 +176,22 @@ export async function updateUser(userId: string, formData: FormData) {
       email,
       username,
       name,
-      role,
+      role: role as "USER" | "ADMIN",
     }
 
+    // Handle password update
     let passwordChanged = false
-
-    // Only update password if provided
     if (password && password.trim() !== "") {
+      if (!validatePassword(password)) {
+        throw new Error("Password must be 6-128 characters long")
+      }
+
       updateData.password = await bcrypt.hash(password, 12)
       updateData.tokenVersion = currentUser.tokenVersion + 1 // Invalidate existing sessions
       passwordChanged = true
     }
 
+    // Update user
     await prisma.user.update({
       where: { id: userId },
       data: updateData,
@@ -164,26 +199,43 @@ export async function updateUser(userId: string, formData: FormData) {
 
     revalidatePath("/admin/users")
 
-    return {
-      success: true,
-      message: passwordChanged ? "User updated and password changed" : "User updated successfully",
-      passwordChanged,
-    }
+    const message = passwordChanged
+      ? "User updated successfully. User has been logged out due to password change."
+      : "User updated successfully"
+
+    return { success: true, message }
   } catch (error) {
     console.error("Database error:", error)
-    throw new Error(error instanceof Error ? error.message : "Failed to update user")
+    if (error instanceof Error) {
+      throw error
+    }
+    throw new Error("Failed to update user. Please try again.")
   }
 }
 
 export async function deleteUser(userId: string) {
-  const session = await getServerSession(authOptions)
+  // Get client IP for rate limiting
+  const headersList = headers()
+  const forwarded = headersList.get("x-forwarded-for")
+  const clientIP = forwarded ? forwarded.split(",")[0].trim() : "unknown"
 
-  if (!session?.user?.role || session.user.role !== "ADMIN") {
-    throw new Error("Unauthorized")
+  // Rate limiting
+  const rateLimitResult = rateLimit(`delete_user:${clientIP}`, 5, 60 * 1000) // 5 attempts per minute
+  if (!rateLimitResult.success) {
+    throw new Error("Too many requests. Please try again later.")
   }
 
   try {
-    // Delete user and their bookings (cascade)
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    })
+
+    if (!user) {
+      throw new Error("User not found")
+    }
+
+    // Delete user (this will cascade delete bookings due to foreign key constraint)
     await prisma.user.delete({
       where: { id: userId },
     })
@@ -192,6 +244,37 @@ export async function deleteUser(userId: string) {
     return { success: true, message: "User deleted successfully" }
   } catch (error) {
     console.error("Database error:", error)
+    if (error instanceof Error) {
+      throw error
+    }
     throw new Error("Failed to delete user. Please try again.")
+  }
+}
+
+export async function getUsers() {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        name: true,
+        role: true,
+        createdAt: true,
+        _count: {
+          select: {
+            bookings: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    })
+
+    return users
+  } catch (error) {
+    console.error("Database error:", error)
+    throw new Error("Failed to fetch users")
   }
 }

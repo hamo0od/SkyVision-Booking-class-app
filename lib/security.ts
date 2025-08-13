@@ -78,7 +78,8 @@ export function validateUsername(username: string): boolean {
 }
 
 export function validateName(name: string): boolean {
-  return name.length >= 2 && name.length <= 50 && /^[a-zA-Z\s'-]+$/.test(name)
+  // Updated to include numbers: letters, numbers, spaces, hyphens, and apostrophes
+  return name.length >= 2 && name.length <= 50 && /^[a-zA-Z0-9\s'-]+$/.test(name)
 }
 
 export function validatePassword(password: string): boolean {
