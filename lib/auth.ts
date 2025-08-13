@@ -1,68 +1,72 @@
 import type { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { prisma } from "./db"
+import { prisma } from "@/lib/db"
 import bcrypt from "bcryptjs"
-import { rateLimit } from "./security"
+import { rateLimit, sanitizeInput } from "@/lib/security"
 
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: "credentials",
       credentials: {
-        username: { label: "Username or Email", type: "text" },
+        username: { label: "Username", type: "text" },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials, req) {
-        console.log("🔐 Auth attempt:", { username: credentials?.username })
-
         if (!credentials?.username || !credentials?.password) {
-          console.log("❌ Missing credentials")
+          console.log("Missing credentials")
           return null
         }
 
         // Rate limiting
-        const ip = (req?.headers?.["x-forwarded-for"] as string) || "unknown"
-        const rateLimitResult = rateLimit(`auth:${ip}`, 5, 15 * 60 * 1000)
+        const clientIP = req?.headers?.["x-forwarded-for"] || req?.headers?.["x-real-ip"] || "unknown"
+        const rateLimitResult = rateLimit(`auth:${clientIP}`, 5, 15 * 60 * 1000)
 
         if (!rateLimitResult.success) {
-          console.log("❌ Rate limit exceeded for IP:", ip)
+          console.log("Rate limit exceeded for IP:", clientIP)
           return null
         }
+
+        // Sanitize input
+        const username = sanitizeInput(credentials.username)
+        const password = credentials.password
+
+        console.log("Attempting login for:", username)
 
         try {
           // Find user by username or email
           const user = await prisma.user.findFirst({
             where: {
-              OR: [{ username: credentials.username }, { email: credentials.username }],
+              OR: [{ username: username }, { email: username }],
             },
           })
 
-          console.log("👤 User found:", user ? "Yes" : "No")
-
           if (!user) {
+            console.log("User not found:", username)
             return null
           }
 
-          // Check password
-          const isValidPassword = await bcrypt.compare(credentials.password, user.password)
-          console.log("🔑 Password valid:", isValidPassword)
+          console.log("User found:", user.email, "Role:", user.role)
+
+          // Verify password
+          const isValidPassword = await bcrypt.compare(password, user.password)
 
           if (!isValidPassword) {
+            console.log("Invalid password for user:", username)
             return null
           }
 
-          console.log("✅ Login successful for:", user.username)
+          console.log("Password valid, login successful")
 
           return {
             id: user.id,
             email: user.email,
             name: user.name,
-            username: user.username,
             role: user.role,
             tokenVersion: user.tokenVersion,
           }
         } catch (error) {
-          console.error("❌ Auth error:", error)
+          console.error("Auth error:", error)
           return null
         }
       },
@@ -70,27 +74,26 @@ export const authOptions: NextAuthOptions = {
   ],
   session: {
     strategy: "jwt",
+    maxAge: 24 * 60 * 60, // 24 hours
   },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id
-        token.username = user.username
         token.role = user.role
         token.tokenVersion = user.tokenVersion
       }
 
-      // Check if token version is still valid
-      if (token.id && token.tokenVersion !== undefined) {
+      // Check if tokenVersion is still valid
+      if (token.email && token.tokenVersion !== undefined) {
         try {
           const dbUser = await prisma.user.findUnique({
-            where: { id: token.id as string },
+            where: { email: token.email },
             select: { tokenVersion: true },
           })
 
           if (!dbUser || dbUser.tokenVersion !== token.tokenVersion) {
-            console.log("🔄 Token version mismatch, invalidating session")
-            return null
+            console.log("Token version mismatch, invalidating session")
+            return null // This will invalidate the session
           }
         } catch (error) {
           console.error("Error checking token version:", error)
@@ -102,8 +105,6 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (token) {
-        session.user.id = token.id as string
-        session.user.username = token.username as string
         session.user.role = token.role as string
         session.user.tokenVersion = token.tokenVersion as number
       }
@@ -113,5 +114,5 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: "/auth/signin",
   },
-  debug: true,
+  debug: process.env.NODE_ENV === "development",
 }

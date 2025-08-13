@@ -45,6 +45,54 @@ export function rateLimit(
   return { success: true, remaining: limit - current.count, resetTime: current.resetTime }
 }
 
+export function sanitizeInput(input: string): string {
+  if (typeof input !== "string") return ""
+
+  return input
+    .replace(/[<>]/g, "") // Remove < and > to prevent HTML injection
+    .replace(/javascript:/gi, "") // Remove javascript: protocol
+    .replace(/on\w+=/gi, "") // Remove event handlers like onclick=
+    .trim()
+}
+
+export function sanitizeFormData(formData: FormData): Record<string, string> {
+  const sanitized: Record<string, string> = {}
+
+  for (const [key, value] of formData.entries()) {
+    if (typeof value === "string") {
+      sanitized[key] = sanitizeInput(value)
+    }
+  }
+
+  return sanitized
+}
+
+export function validateEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return emailRegex.test(email) && email.length <= 254
+}
+
+export function validateUsername(username: string): boolean {
+  const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/
+  return usernameRegex.test(username)
+}
+
+export function validateName(name: string): boolean {
+  return name.length >= 2 && name.length <= 50 && /^[a-zA-Z\s'-]+$/.test(name)
+}
+
+export function validatePassword(password: string): boolean {
+  return password.length >= 6 && password.length <= 128
+}
+
+export function validateClassroomName(name: string): boolean {
+  return name.length >= 2 && name.length <= 100 && /^[a-zA-Z0-9\s\-_]+$/.test(name)
+}
+
+export function validateCapacity(capacity: number): boolean {
+  return Number.isInteger(capacity) && capacity >= 1 && capacity <= 1000
+}
+
 export function getClientIP(request: NextRequest): string {
   const forwarded = request.headers.get("x-forwarded-for")
   const realIP = request.headers.get("x-real-ip")
@@ -60,47 +108,6 @@ export function getClientIP(request: NextRequest): string {
   return request.ip || "unknown"
 }
 
-export function sanitizeInput(input: string): string {
-  if (typeof input !== "string") return ""
-
-  return input
-    .replace(/[<>]/g, "") // Remove < and >
-    .replace(/javascript:/gi, "") // Remove javascript: protocol
-    .replace(/on\w+=/gi, "") // Remove event handlers like onclick=
-    .replace(/script/gi, "") // Remove script tags
-    .trim()
-}
-
-// Sanitize form data
-export function sanitizeFormData(formData: FormData): Record<string, string> {
-  const sanitized: Record<string, string> = {}
-
-  for (const [key, value] of formData.entries()) {
-    if (typeof value === "string") {
-      sanitized[key] = sanitizeInput(value)
-    }
-  }
-
-  return sanitized
-}
-
-export function validateEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  return emailRegex.test(email)
-}
-
-export function validateUsername(username: string): boolean {
-  const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/
-  return usernameRegex.test(username)
-}
-
-export function validatePassword(password: string): boolean {
-  // At least 6 characters
-  return password.length >= 6
-}
-
-export function validateName(name: string): boolean {
-  // 1-50 characters, letters, spaces, hyphens, apostrophes
-  const nameRegex = /^[a-zA-Z\s\-']{1,50}$/
-  return nameRegex.test(name)
+export function isValidCSRFToken(token: string, expected: string): boolean {
+  return token === expected && token.length > 0
 }

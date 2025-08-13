@@ -4,27 +4,19 @@ const bcrypt = require("bcryptjs")
 const prisma = new PrismaClient()
 
 async function main() {
-  console.log("🗑️ Clearing existing data...")
+  console.log("🗑️  Deleting all existing data...")
 
-  // Delete all bookings first (foreign key constraint)
+  // Delete in correct order to handle foreign key constraints
   await prisma.booking.deleteMany({})
-  console.log("✅ Deleted all bookings")
-
-  // Delete all users
-  await prisma.user.deleteMany({})
-  console.log("✅ Deleted all users")
-
-  // Delete all classrooms
   await prisma.classroom.deleteMany({})
-  console.log("✅ Deleted all classrooms")
+  await prisma.user.deleteMany({})
 
-  console.log("🌱 Seeding fresh data...")
+  console.log("✅ All data deleted")
 
-  // Hash passwords
-  const adminPassword = await bcrypt.hash("password", 12)
-  const userPassword = await bcrypt.hash("password", 12)
+  console.log("🌱 Creating fresh users...")
 
   // Create admin user
+  const adminPassword = await bcrypt.hash("password", 12)
   const admin = await prisma.user.create({
     data: {
       email: "admin@example.com",
@@ -37,6 +29,7 @@ async function main() {
   })
 
   // Create regular user
+  const userPassword = await bcrypt.hash("password", 12)
   const user = await prisma.user.create({
     data: {
       email: "user@example.com",
@@ -48,8 +41,13 @@ async function main() {
     },
   })
 
-  // Create sample classrooms
-  const classroom1 = await prisma.classroom.create({
+  console.log("✅ Users created:")
+  console.log("   Admin: admin@example.com / password")
+  console.log("   User:  user@example.com / password")
+
+  console.log("🏫 Creating sample classrooms...")
+
+  await prisma.classroom.create({
     data: {
       name: "Conference Room A",
       capacity: 20,
@@ -57,7 +55,7 @@ async function main() {
     },
   })
 
-  const classroom2 = await prisma.classroom.create({
+  await prisma.classroom.create({
     data: {
       name: "Meeting Room B",
       capacity: 10,
@@ -65,18 +63,13 @@ async function main() {
     },
   })
 
-  console.log("✅ Database seeded successfully!")
-  console.log("\n📋 Login Credentials:")
-  console.log("👑 Admin: admin@example.com / password")
-  console.log("👤 User:  user@example.com / password")
-  console.log("\n🏫 Created Classrooms:")
-  console.log("- Conference Room A (capacity: 20)")
-  console.log("- Meeting Room B (capacity: 10)")
+  console.log("✅ Sample classrooms created")
+  console.log("🎉 Database reset and seeded successfully!")
 }
 
 main()
   .catch((e) => {
-    console.error("❌ Seeding failed:", e)
+    console.error("❌ Error:", e)
     process.exit(1)
   })
   .finally(async () => {
