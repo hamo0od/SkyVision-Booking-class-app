@@ -49,16 +49,13 @@ export function BookingForm({ classrooms }: BookingFormProps) {
       const startDate = new Date(start)
       const endDate = new Date(end)
       const durationInMinutes = (endDate.getTime() - startDate.getTime()) / (1000 * 60)
-      const maxDurationInMinutes = 2.5 * 60 // 150 minutes
 
-      if (durationInMinutes > maxDurationInMinutes) {
-        setDurationWarning(`Duration exceeds maximum of 2.5 hours (${Math.round(durationInMinutes)} minutes selected)`)
-      } else if (durationInMinutes <= 0) {
+      if (durationInMinutes <= 0) {
         setDurationWarning("End time must be after start time")
       } else {
         const hours = Math.floor(durationInMinutes / 60)
         const minutes = Math.round(durationInMinutes % 60)
-        setDurationWarning(`Duration: ${hours}h ${minutes}m (within 2.5h limit)`)
+        setDurationWarning(`Duration: ${hours}h ${minutes}m`)
       }
     } else {
       setDurationWarning("")
@@ -232,11 +229,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
 
             {durationWarning && (
               <div
-                className={`p-2 rounded-lg flex items-center gap-2 text-sm ${
-                  durationWarning.includes("exceeds") || durationWarning.includes("must be after")
-                    ? "bg-red-50 text-red-800 border border-red-200"
-                    : "bg-blue-50 text-blue-800 border border-blue-200"
-                }`}
+                className={`p-2 rounded-lg flex items-center gap-2 text-sm bg-blue-50 text-blue-800 border border-blue-200`}
               >
                 <Clock className="h-4 w-4 flex-shrink-0" />
                 <span>{durationWarning}</span>

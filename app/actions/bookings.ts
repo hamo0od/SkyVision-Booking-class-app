@@ -58,13 +58,7 @@ export async function createBooking(formData: FormData) {
     throw new Error("Cannot book time in the past")
   }
 
-  // Check maximum session duration (2.5 hours = 150 minutes)
-  const durationInMinutes = (endTime.getTime() - startTime.getTime()) / (1000 * 60)
-  const maxDurationInMinutes = 2.5 * 60 // 150 minutes
-
-  if (durationInMinutes > maxDurationInMinutes) {
-    throw new Error("Maximum session duration is 2.5 hours (150 minutes)")
-  }
+  // Removed duration limit check
 
   if (participants < 1) {
     throw new Error("Number of participants must be at least 1")
