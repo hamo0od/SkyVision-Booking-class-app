@@ -4,9 +4,21 @@ import { prisma } from "@/lib/db"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
-import { writeFile, mkdir } from "fs/promises"
+import { writeFile, mkdir, unlink } from "fs/promises"
 import { join } from "path"
 import { sanitizeInput } from "@/lib/security"
+
+// Helper function to delete files
+async function deleteFile(filePath: string) {
+  try {
+    const fullPath = join(process.cwd(), filePath)
+    await unlink(fullPath)
+    console.log(`Deleted file: ${filePath}`)
+  } catch (error) {
+    console.error(`Failed to delete file ${filePath}:`, error)
+    // Don't throw error - file might already be deleted or not exist
+  }
+}
 
 export async function createBooking(formData: FormData) {
   const session = await getServerSession(authOptions)
@@ -311,7 +323,7 @@ export async function cancelBooking(bookingId: string) {
     throw new Error("User not found in database")
   }
 
-  // Get the booking
+  // Get the booking with file paths
   const booking = await prisma.booking.findUnique({
     where: { id: bookingId },
   })
@@ -336,6 +348,14 @@ export async function cancelBooking(bookingId: string) {
     await prisma.booking.delete({
       where: { id: bookingId },
     })
+
+    // Delete associated files
+    if (booking.ecaaApprovalFile) {
+      await deleteFile(booking.ecaaApprovalFile)
+    }
+    if (booking.trainingOrderFile) {
+      await deleteFile(booking.trainingOrderFile)
+    }
 
     revalidatePath("/dashboard")
     revalidatePath("/admin")
@@ -363,9 +383,27 @@ export async function deleteBooking(bookingId: string) {
   }
 
   try {
+    // Get the booking with file paths before deleting
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+    })
+
+    if (!booking) {
+      throw new Error("Booking not found")
+    }
+
+    // Delete the booking
     await prisma.booking.delete({
       where: { id: bookingId },
     })
+
+    // Delete associated files
+    if (booking.ecaaApprovalFile) {
+      await deleteFile(booking.ecaaApprovalFile)
+    }
+    if (booking.trainingOrderFile) {
+      await deleteFile(booking.trainingOrderFile)
+    }
 
     revalidatePath("/admin")
     revalidatePath("/dashboard")
@@ -373,5 +411,57 @@ export async function deleteBooking(bookingId: string) {
   } catch (error) {
     console.error("Database error:", error)
     throw new Error("Failed to delete booking")
+  }
+}
+
+// New function to delete bulk bookings
+export async function deleteBulkBooking(bulkBookingId: string) {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.user?.email) {
+    throw new Error("Unauthorized")
+  }
+
+  // Get the actual user from database using email
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+  })
+
+  if (!user || user.role !== "ADMIN") {
+    throw new Error("Unauthorized - Admin access required")
+  }
+
+  try {
+    // Get all bookings in the bulk booking with file paths
+    const bookings = await prisma.booking.findMany({
+      where: { bulkBookingId },
+    })
+
+    if (bookings.length === 0) {
+      throw new Error("Bulk booking not found")
+    }
+
+    // Delete all bookings in the bulk booking
+    await prisma.booking.deleteMany({
+      where: { bulkBookingId },
+    })
+
+    // Delete associated files (only delete unique files to avoid errors)
+    const uniqueFiles = new Set<string>()
+    bookings.forEach((booking) => {
+      if (booking.ecaaApprovalFile) uniqueFiles.add(booking.ecaaApprovalFile)
+      if (booking.trainingOrderFile) uniqueFiles.add(booking.trainingOrderFile)
+    })
+
+    for (const filePath of uniqueFiles) {
+      await deleteFile(filePath)
+    }
+
+    revalidatePath("/admin")
+    revalidatePath("/dashboard")
+    return { success: true, message: `Deleted ${bookings.length} bookings from bulk booking` }
+  } catch (error) {
+    console.error("Database error:", error)
+    throw new Error("Failed to delete bulk booking")
   }
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { createBooking } from "@/app/actions/bookings"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -49,6 +49,16 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   const [selectedDates, setSelectedDates] = useState<string[]>([])
   const [ecaaApprovalFile, setEcaaApprovalFile] = useState<File | null>(null)
   const [trainingOrderFile, setTrainingOrderFile] = useState<File | null>(null)
+
+  // Reset time fields when bulk booking is toggled
+  useEffect(() => {
+    if (isBulkBooking) {
+      // Reset to empty times when switching to bulk booking
+      setStartTime("")
+      setEndTime("")
+      setDurationWarning("")
+    }
+  }, [isBulkBooking])
 
   // Calculate duration and show warning if needed
   const checkDuration = (start: string, end: string) => {
