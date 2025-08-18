@@ -137,11 +137,17 @@ export function ModernDateTimePicker({
     return slots
   }
 
-  // Get available time slots based on selected date (filters past slots for today)
+  // Get available time slots based on selected date and time-only mode
   const availableTimeSlots = useMemo(() => {
     const allSlots = generateTimeSlots()
     if (!selectedDate) return allSlots
 
+    // For time-only mode (bulk booking), always start from 7 AM
+    if (timeOnly) {
+      return allSlots
+    }
+
+    // For regular booking, filter past times if it's today
     const sel = new Date(`${selectedDate}T00:00:00`)
     const todayStart = new Date()
     todayStart.setHours(0, 0, 0, 0)
@@ -158,7 +164,7 @@ export function ModernDateTimePicker({
       })
     }
     return allSlots
-  }, [selectedDate])
+  }, [selectedDate, timeOnly])
 
   const days = getDaysInMonth(currentMonth)
   const monthNames = [

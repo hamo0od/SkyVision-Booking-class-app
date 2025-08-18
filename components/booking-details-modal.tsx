@@ -3,7 +3,20 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Calendar, Clock, MapPin, User, Users, GraduationCap, Award, BookOpen, X, FileText, Eye } from "lucide-react"
+import {
+  Calendar,
+  Clock,
+  MapPin,
+  User,
+  Users,
+  GraduationCap,
+  Award,
+  BookOpen,
+  X,
+  FileText,
+  Eye,
+  CalendarDays,
+} from "lucide-react"
 import { useState } from "react"
 import { PDFViewer } from "./pdf-viewer"
 
@@ -64,9 +77,23 @@ export function BookingDetailsModal({ booking, isOpen, onClose }: BookingDetails
     }
   }
 
+  const isBulkBooking = (purpose: string) => {
+    return purpose.startsWith("BULK_BOOKING:")
+  }
+
+  const getBulkBookingInfo = (purpose: string) => {
+    if (!isBulkBooking(purpose)) return null
+    const [, datesStr, actualPurpose] = purpose.split(":", 3)
+    const dates = datesStr.split(",")
+    return { dates, actualPurpose }
+  }
+
   const openPDFViewer = (filePath: string, fileName: string) => {
     setPdfViewer({ filePath, fileName })
   }
+
+  const bulkInfo = getBulkBookingInfo(booking.purpose)
+  const displayPurpose = bulkInfo ? bulkInfo.actualPurpose : booking.purpose
 
   return (
     <>
@@ -77,9 +104,10 @@ export function BookingDetailsModal({ booking, isOpen, onClose }: BookingDetails
               <DialogTitle className="text-xl font-bold flex items-center gap-2">
                 <MapPin className="h-5 w-5 text-blue-600" />
                 Booking Details - {booking.classroom.name}
-                {booking.bulkBookingId && (
-                  <Badge variant="outline" className="ml-2">
-                    Bulk Booking
+                {bulkInfo && (
+                  <Badge variant="outline" className="ml-2 flex items-center gap-1">
+                    <CalendarDays className="h-3 w-3" />
+                    Bulk ({bulkInfo.dates.length} dates)
                   </Badge>
                 )}
               </DialogTitle>
@@ -125,34 +153,70 @@ export function BookingDetailsModal({ booking, isOpen, onClose }: BookingDetails
                 <Calendar className="h-4 w-4" />
                 Date & Time
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Date</label>
-                  <p className="text-gray-900">
-                    {new Date(booking.startTime).toLocaleDateString("en-US", {
-                      weekday: "long",
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
-                  </p>
+              {bulkInfo ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Bulk Booking Dates</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                      {bulkInfo.dates.map((date, index) => (
+                        <div key={index} className="bg-white p-2 rounded border text-center">
+                          <span className="text-sm font-medium">
+                            {new Date(date).toLocaleDateString("en-US", {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Session Time</label>
+                    <p className="text-gray-900 flex items-center gap-1">
+                      <Clock className="h-4 w-4" />
+                      {new Date(booking.startTime).toLocaleTimeString("en-US", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}{" "}
+                      -{" "}
+                      {new Date(booking.endTime).toLocaleTimeString("en-US", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Time</label>
-                  <p className="text-gray-900 flex items-center gap-1">
-                    <Clock className="h-4 w-4" />
-                    {new Date(booking.startTime).toLocaleTimeString("en-US", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}{" "}
-                    -{" "}
-                    {new Date(booking.endTime).toLocaleTimeString("en-US", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Date</label>
+                    <p className="text-gray-900">
+                      {new Date(booking.startTime).toLocaleDateString("en-US", {
+                        weekday: "long",
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Time</label>
+                    <p className="text-gray-900 flex items-center gap-1">
+                      <Clock className="h-4 w-4" />
+                      {new Date(booking.startTime).toLocaleTimeString("en-US", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}{" "}
+                      -{" "}
+                      {new Date(booking.endTime).toLocaleTimeString("en-US", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Training Details */}
@@ -266,7 +330,7 @@ export function BookingDetailsModal({ booking, isOpen, onClose }: BookingDetails
                 <BookOpen className="h-4 w-4" />
                 Course Title
               </h3>
-              <p className="text-gray-900 leading-relaxed">{booking.purpose}</p>
+              <p className="text-gray-900 leading-relaxed">{displayPurpose}</p>
             </div>
           </div>
 
