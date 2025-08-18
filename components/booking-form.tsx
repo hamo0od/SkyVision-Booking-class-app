@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ModernDateTimePicker } from "./modern-date-time-picker"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   CalendarDays,
   Users,
@@ -20,6 +21,8 @@ import {
   FileText,
   BookOpen,
   Clock,
+  Upload,
+  Calendar,
 } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
@@ -40,8 +43,12 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   const [startTime, setStartTime] = useState("")
   const [endTime, setEndTime] = useState("")
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
-  const [hasEcaaApproval, setHasEcaaApproval] = useState("") // force explicit choice
+  const [hasEcaaInstructorApproval, setHasEcaaInstructorApproval] = useState("")
   const [durationWarning, setDurationWarning] = useState("")
+  const [isBulkBooking, setIsBulkBooking] = useState(false)
+  const [selectedDates, setSelectedDates] = useState<string[]>([])
+  const [ecaaApprovalFile, setEcaaApprovalFile] = useState<File | null>(null)
+  const [trainingOrderFile, setTrainingOrderFile] = useState<File | null>(null)
 
   // Calculate duration and show warning if needed
   const checkDuration = (start: string, end: string) => {
@@ -72,7 +79,44 @@ export function BookingForm({ classrooms }: BookingFormProps) {
     if (startTime) checkDuration(startTime, value)
   }
 
-  // Client-side guard: block submit if required fields not chosen (especially classroom/ECAA)
+  const handleDateSelection = (date: string, checked: boolean) => {
+    if (checked) {
+      setSelectedDates([...selectedDates, date])
+    } else {
+      setSelectedDates(selectedDates.filter((d) => d !== date))
+    }
+  }
+
+  const generateDateOptions = () => {
+    const dates = []
+    const today = new Date()
+    for (let i = 0; i < 30; i++) {
+      const date = new Date(today)
+      date.setDate(today.getDate() + i)
+      dates.push(date.toISOString().split("T")[0])
+    }
+    return dates
+  }
+
+  const handleFileChange = (file: File | null, type: "ecaa" | "training") => {
+    if (file) {
+      if (file.type !== "application/pdf") {
+        setMessage({ type: "error", text: "Only PDF files are allowed" })
+        return
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        setMessage({ type: "error", text: "File size must be less than 10MB" })
+        return
+      }
+    }
+
+    if (type === "ecaa") {
+      setEcaaApprovalFile(file)
+    } else {
+      setTrainingOrderFile(file)
+    }
+  }
+
   const preValidate = (formData: FormData): string | null => {
     const classroomId = (formData.get("classroomId") as string | null)?.trim() || ""
     const start = (formData.get("startTime") as string | null)?.trim() || ""
@@ -81,7 +125,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
     const tOrder = (formData.get("trainingOrder") as string | null)?.trim() || ""
     const participants = (formData.get("participants") as string | null)?.trim() || ""
     const purpose = (formData.get("purpose") as string | null)?.trim() || ""
-    const ecaa = (formData.get("ecaaApproval") as string | null)?.trim() || ""
+    const ecaaInstructor = (formData.get("ecaaInstructorApproval") as string | null)?.trim() || ""
 
     if (!classroomId) return "Please select a classroom."
     if (!start) return "Please select a start date and time."
@@ -90,14 +134,22 @@ export function BookingForm({ classrooms }: BookingFormProps) {
     if (!tOrder) return "Training order is required."
     if (!participants) return "Number of participants is required."
     if (!purpose) return "Course title is required."
-    if (ecaa !== "true" && ecaa !== "false") return "Please select your ECAA approval status."
+    if (ecaaInstructor !== "true" && ecaaInstructor !== "false")
+      return "Please select your ECAA instructor approval status."
 
-    if (ecaa === "true") {
-      const approvalNumber = (formData.get("approvalNumber") as string | null)?.trim() || ""
+    if (!trainingOrderFile) return "Training order PDF file is required."
+
+    if (ecaaInstructor === "true") {
+      const approvalNumber = (formData.get("ecaaApprovalNumber") as string | null)?.trim() || ""
       if (!approvalNumber) return "ECAA approval number is required."
-    } else if (ecaa === "false") {
+      if (!ecaaApprovalFile) return "ECAA approval PDF file is required."
+    } else if (ecaaInstructor === "false") {
       const qualifications = (formData.get("qualifications") as string | null)?.trim() || ""
-      if (!qualifications) return "Qualifications are required if you don't have ECAA approval."
+      if (!qualifications) return "Qualifications are required if you don't have ECAA instructor approval."
+    }
+
+    if (isBulkBooking && selectedDates.length === 0) {
+      return "Please select at least one date for bulk booking."
     }
 
     return null
@@ -107,9 +159,23 @@ export function BookingForm({ classrooms }: BookingFormProps) {
     setIsSubmitting(true)
     setMessage(null)
 
-    // ensure the selected values are posted
+    // Add form data
     formData.set("classroomId", selectedClassroom)
-    formData.set("ecaaApproval", hasEcaaApproval)
+    formData.set("ecaaInstructorApproval", hasEcaaInstructorApproval)
+    formData.set("isBulkBooking", isBulkBooking.toString())
+
+    // Add selected dates for bulk booking
+    selectedDates.forEach((date) => {
+      formData.append("selectedDates", date)
+    })
+
+    // Add files
+    if (ecaaApprovalFile) {
+      formData.set("ecaaApprovalFile", ecaaApprovalFile)
+    }
+    if (trainingOrderFile) {
+      formData.set("trainingOrderFile", trainingOrderFile)
+    }
 
     const validationError = preValidate(formData)
     if (validationError) {
@@ -126,14 +192,16 @@ export function BookingForm({ classrooms }: BookingFormProps) {
       setSelectedClassroom("")
       setStartTime("")
       setEndTime("")
-      setHasEcaaApproval("")
+      setHasEcaaInstructorApproval("")
       setDurationWarning("")
+      setIsBulkBooking(false)
+      setSelectedDates([])
+      setEcaaApprovalFile(null)
+      setTrainingOrderFile(null)
 
-      // Reset form elements
       const form = document.querySelector("form") as HTMLFormElement
       form?.reset()
 
-      // Scroll to top
       window.scrollTo({ top: 0, behavior: "smooth" })
     } catch (error) {
       setMessage({
@@ -174,6 +242,15 @@ export function BookingForm({ classrooms }: BookingFormProps) {
         )}
 
         <form action={handleSubmit} className="space-y-4 sm:space-y-6" noValidate>
+          {/* Bulk Booking Option */}
+          <div className="flex items-center space-x-2">
+            <Checkbox id="bulkBooking" checked={isBulkBooking} onCheckedChange={setIsBulkBooking} />
+            <Label htmlFor="bulkBooking" className="flex items-center gap-1">
+              <Calendar className="h-4 w-4" />
+              Bulk Booking (Multiple Days)
+            </Label>
+          </div>
+
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-700">
               <MapPin className="inline h-4 w-4 mr-1" />
@@ -197,7 +274,6 @@ export function BookingForm({ classrooms }: BookingFormProps) {
                 ))}
               </SelectContent>
             </Select>
-            {/* Hidden inputs to carry values to FormData; validation handled in JS */}
             <input type="hidden" name="classroomId" value={selectedClassroom} />
             {selectedClassroom && (
               <div className="text-xs text-gray-600 mt-1 p-2 bg-blue-50 rounded">
@@ -206,18 +282,43 @@ export function BookingForm({ classrooms }: BookingFormProps) {
             )}
           </div>
 
+          {/* Date Selection for Bulk Booking */}
+          {isBulkBooking && (
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1">
+                <Calendar className="h-4 w-4 text-gray-600" />
+                Select Dates
+              </Label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-48 overflow-y-auto border rounded p-2">
+                {generateDateOptions().map((date) => (
+                  <div key={date} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`date-${date}`}
+                      checked={selectedDates.includes(date)}
+                      onCheckedChange={(checked) => handleDateSelection(date, checked as boolean)}
+                    />
+                    <Label htmlFor={`date-${date}`} className="text-sm">
+                      {new Date(date).toLocaleDateString()}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-4">
             <ModernDateTimePicker
-              label="Start Date & Time"
+              label={isBulkBooking ? "Session Start Time" : "Start Date & Time"}
               name="startTime"
               value={startTime}
               onChange={handleStartTimeChange}
               min={minDateTime}
               required
+              timeOnly={isBulkBooking}
             />
 
             <ModernDateTimePicker
-              label="End Time (Same Day)"
+              label="End Time"
               name="endTime"
               value={endTime}
               onChange={handleEndTimeChange}
@@ -228,9 +329,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
             />
 
             {durationWarning && (
-              <div
-                className={`p-2 rounded-lg flex items-center gap-2 text-sm bg-blue-50 text-blue-800 border border-blue-200`}
-              >
+              <div className="p-2 rounded-lg flex items-center gap-2 text-sm bg-blue-50 text-blue-800 border border-blue-200">
                 <Clock className="h-4 w-4 flex-shrink-0" />
                 <span>{durationWarning}</span>
               </div>
@@ -267,6 +366,19 @@ export function BookingForm({ classrooms }: BookingFormProps) {
 
           <div className="space-y-2">
             <Label className="flex items-center gap-1">
+              <BookOpen className="h-4 w-4 text-gray-600" />
+              Course Reference
+            </Label>
+            <Input
+              type="text"
+              name="courseReference"
+              placeholder="Enter course reference (optional)"
+              className="w-full"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1">
               <Users className="h-4 w-4 text-gray-600" />
               Number of Participants
             </Label>
@@ -281,40 +393,78 @@ export function BookingForm({ classrooms }: BookingFormProps) {
             />
           </div>
 
+          {/* File Uploads */}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1">
+                <Upload className="h-4 w-4 text-gray-600" />
+                Training Order PDF <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                type="file"
+                accept=".pdf"
+                onChange={(e) => handleFileChange(e.target.files?.[0] || null, "training")}
+                className="w-full"
+                required
+              />
+              <p className="text-xs text-gray-500">PDF format only, maximum 10MB</p>
+            </div>
+          </div>
+
           <div className="space-y-3">
             <Label className="flex items-center gap-1">
               <Award className="h-4 w-4 text-gray-600" />
-              ECAA Approval Status
+              ECAA Instructor Approval Status
             </Label>
-            <RadioGroup value={hasEcaaApproval} onValueChange={setHasEcaaApproval} className="flex flex-col space-y-1">
+            <RadioGroup
+              value={hasEcaaInstructorApproval}
+              onValueChange={setHasEcaaInstructorApproval}
+              className="flex flex-col space-y-1"
+            >
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="true" id="ecaa-yes" />
-                <Label htmlFor="ecaa-yes" className="font-normal">
-                  Yes, I have ECAA Approval
+                <RadioGroupItem value="true" id="ecaa-instructor-yes" />
+                <Label htmlFor="ecaa-instructor-yes" className="font-normal">
+                  Yes, I have ECAA Instructor Approval
                 </Label>
               </div>
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="false" id="ecaa-no" />
-                <Label htmlFor="ecaa-no" className="font-normal">
-                  No, I don't have ECAA Approval
+                <RadioGroupItem value="false" id="ecaa-instructor-no" />
+                <Label htmlFor="ecaa-instructor-no" className="font-normal">
+                  No, I don't have ECAA Instructor Approval
                 </Label>
               </div>
             </RadioGroup>
-            <input type="hidden" name="ecaaApproval" value={hasEcaaApproval} />
+            <input type="hidden" name="ecaaInstructorApproval" value={hasEcaaInstructorApproval} />
 
-            {hasEcaaApproval !== "" &&
-              (hasEcaaApproval === "true" ? (
-                <div className="pt-2">
-                  <Label htmlFor="approvalNumber" className="text-sm">
-                    ECAA Approval Number
-                  </Label>
-                  <Input
-                    id="approvalNumber"
-                    name="approvalNumber"
-                    placeholder="Enter your ECAA approval number"
-                    required
-                    className="mt-1"
-                  />
+            {hasEcaaInstructorApproval !== "" &&
+              (hasEcaaInstructorApproval === "true" ? (
+                <div className="space-y-4 pt-2">
+                  <div>
+                    <Label htmlFor="ecaaApprovalNumber" className="text-sm">
+                      ECAA Approval Number
+                    </Label>
+                    <Input
+                      id="ecaaApprovalNumber"
+                      name="ecaaApprovalNumber"
+                      placeholder="Enter your ECAA approval number"
+                      required
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label className="flex items-center gap-1">
+                      <Upload className="h-4 w-4 text-gray-600" />
+                      ECAA Approval PDF <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      type="file"
+                      accept=".pdf"
+                      onChange={(e) => handleFileChange(e.target.files?.[0] || null, "ecaa")}
+                      className="w-full mt-1"
+                      required
+                    />
+                    <p className="text-xs text-gray-500">PDF format only, maximum 10MB</p>
+                  </div>
                 </div>
               ) : (
                 <div className="pt-2">
@@ -358,7 +508,9 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               </div>
             ) : (
               <>
-                <span className="hidden sm:inline">Submit Booking Request</span>
+                <span className="hidden sm:inline">
+                  {isBulkBooking ? "Submit Bulk Booking Request" : "Submit Booking Request"}
+                </span>
                 <span className="sm:hidden">Submit Request</span>
               </>
             )}
