@@ -23,6 +23,7 @@ import {
   Clock,
   Upload,
   Calendar,
+  Building2,
 } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
@@ -37,9 +38,26 @@ interface BookingFormProps {
   classrooms: Classroom[]
 }
 
+const DEPARTMENTS = [
+  "Cockpit Training",
+  "Cabin Crew",
+  "Station",
+  "OCC",
+  "Compliance",
+  "Safety",
+  "Security",
+  "Maintenance",
+  "Planning & Engineering",
+  "HR & Financial",
+  "Commercial & Planning",
+  "IT",
+  "Meetings",
+]
+
 export function BookingForm({ classrooms }: BookingFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedClassroom, setSelectedClassroom] = useState("")
+  const [selectedDepartment, setSelectedDepartment] = useState("")
   const [startTime, setStartTime] = useState("")
   const [endTime, setEndTime] = useState("")
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
@@ -120,6 +138,11 @@ export function BookingForm({ classrooms }: BookingFormProps) {
       }
     }
 
+    // Clear any previous error messages when file is valid
+    if (message && (message.text.includes("PDF files") || message.text.includes("10MB"))) {
+      setMessage(null)
+    }
+
     if (type === "ecaa") {
       setEcaaApprovalFile(file)
     } else {
@@ -129,6 +152,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
 
   const preValidate = (formData: FormData): string | null => {
     const classroomId = (formData.get("classroomId") as string | null)?.trim() || ""
+    const department = (formData.get("department") as string | null)?.trim() || ""
     const start = (formData.get("startTime") as string | null)?.trim() || ""
     const end = (formData.get("endTime") as string | null)?.trim() || ""
     const instructor = (formData.get("instructorName") as string | null)?.trim() || ""
@@ -138,6 +162,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
     const ecaaInstructor = (formData.get("ecaaInstructorApproval") as string | null)?.trim() || ""
 
     if (!classroomId) return "Please select a classroom."
+    if (!department) return "Please select a department."
     if (!start) return "Please select a start date and time."
     if (!end) return "Please select an end time."
     if (!instructor) return "Instructor name is required."
@@ -171,6 +196,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
 
     // Add form data
     formData.set("classroomId", selectedClassroom)
+    formData.set("department", selectedDepartment)
     formData.set("ecaaInstructorApproval", hasEcaaInstructorApproval)
     formData.set("isBulkBooking", isBulkBooking.toString())
 
@@ -200,6 +226,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
 
       // Reset form
       setSelectedClassroom("")
+      setSelectedDepartment("")
       setStartTime("")
       setEndTime("")
       setHasEcaaInstructorApproval("")
@@ -290,6 +317,27 @@ export function BookingForm({ classrooms }: BookingFormProps) {
                 {classrooms.find((c) => c.id === selectedClassroom)?.description}
               </div>
             )}
+          </div>
+
+          {/* Department Selection */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              <Building2 className="inline h-4 w-4 mr-1" />
+              Department
+            </label>
+            <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a department" />
+              </SelectTrigger>
+              <SelectContent>
+                {DEPARTMENTS.map((department) => (
+                  <SelectItem key={department} value={department}>
+                    {department}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <input type="hidden" name="department" value={selectedDepartment} />
           </div>
 
           {/* Date Selection for Bulk Booking */}

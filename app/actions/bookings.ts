@@ -43,6 +43,7 @@ export async function createBooking(formData: FormData) {
   const instructorName = sanitizeInput((formData.get("instructorName") as string | null)?.trim() || "")
   const trainingOrder = sanitizeInput((formData.get("trainingOrder") as string | null)?.trim() || "")
   const courseReference = sanitizeInput((formData.get("courseReference") as string | null)?.trim() || "")
+  const department = sanitizeInput((formData.get("department") as string | null)?.trim() || "")
   const participants = Number.parseInt((formData.get("participants") as string | null) || "0", 10)
   const ecaaInstructorApprovalRaw = formData.get("ecaaInstructorApproval") as string | null
 
@@ -67,7 +68,7 @@ export async function createBooking(formData: FormData) {
   const ecaaApprovalFile = formData.get("ecaaApprovalFile") as File | null
   const trainingOrderFile = formData.get("trainingOrderFile") as File | null
 
-  if (!classroomId || !startTimeRaw || !endTimeRaw || !purpose || !instructorName || !trainingOrder) {
+  if (!classroomId || !startTimeRaw || !endTimeRaw || !purpose || !instructorName || !trainingOrder || !department) {
     throw new Error("All fields are required")
   }
 
@@ -106,6 +107,27 @@ export async function createBooking(formData: FormData) {
     throw new Error("Training order file must be less than 10MB")
   }
 
+  // Validate department
+  const validDepartments = [
+    "Cockpit Training",
+    "Cabin Crew",
+    "Station",
+    "OCC",
+    "Compliance",
+    "Safety",
+    "Security",
+    "Maintenance",
+    "Planning & Engineering",
+    "HR & Financial",
+    "Commercial & Planning",
+    "IT",
+    "Meetings",
+  ]
+
+  if (!validDepartments.includes(department)) {
+    throw new Error("Please select a valid department")
+  }
+
   const startTime = new Date(startTimeRaw)
   const endTime = new Date(endTimeRaw)
 
@@ -117,7 +139,8 @@ export async function createBooking(formData: FormData) {
     throw new Error("End time must be after start time")
   }
 
-  if (startTime < new Date()) {
+  // Only check for past time if it's NOT a bulk booking
+  if (!isBulkBooking && startTime < new Date()) {
     throw new Error("Cannot book time in the past")
   }
 
@@ -214,6 +237,7 @@ export async function createBooking(formData: FormData) {
           instructorName,
           trainingOrder,
           courseReference: courseReference || null,
+          department,
           participants,
           ecaaInstructorApproval,
           ecaaApprovalNumber,
@@ -267,6 +291,7 @@ export async function createBooking(formData: FormData) {
           instructorName,
           trainingOrder,
           courseReference: courseReference || null,
+          department,
           participants,
           ecaaInstructorApproval,
           ecaaApprovalNumber,
@@ -331,6 +356,7 @@ export async function updateBookingStatus(bookingId: string, status: "APPROVED" 
           instructorName: booking.instructorName,
           trainingOrder: booking.trainingOrder,
           courseReference: booking.courseReference,
+          department: booking.department,
           ecaaInstructorApproval: booking.ecaaInstructorApproval,
           ecaaApprovalNumber: booking.ecaaApprovalNumber,
           qualifications: booking.qualifications,

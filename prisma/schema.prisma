@@ -42,6 +42,7 @@ model Booking {
   instructorName        String
   trainingOrder         String
   courseReference       String?
+  department            String        // New department field
   ecaaInstructorApproval Boolean      @default(false)
   ecaaApprovalNumber    String?
   qualifications        String?

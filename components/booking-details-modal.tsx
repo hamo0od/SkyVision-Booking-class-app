@@ -16,6 +16,7 @@ import {
   FileText,
   Eye,
   CalendarDays,
+  Building2,
 } from "lucide-react"
 import { useState } from "react"
 import { PDFViewer } from "./pdf-viewer"
@@ -33,6 +34,7 @@ interface Booking {
   instructorName: string
   trainingOrder: string
   courseReference: string | null
+  department?: string
   ecaaApprovalFile: string | null
   trainingOrderFile: string | null
   bulkBookingId: string | null
@@ -140,6 +142,15 @@ export function BookingDetailsModal({ booking, isOpen, onClose }: BookingDetails
                     {booking.classroom.name} (Capacity: {booking.classroom.capacity})
                   </p>
                 </div>
+                {booking.department && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Department</label>
+                    <p className="text-gray-900 flex items-center gap-1">
+                      <Building2 className="h-4 w-4" />
+                      {booking.department}
+                    </p>
+                  </div>
+                )}
                 <div>
                   <label className="text-sm font-medium text-gray-600">Booking ID</label>
                   <p className="text-gray-900 font-mono text-sm">{booking.id}</p>

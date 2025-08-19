@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Calendar, Clock, MapPin, X, UserCheck, Users, BookOpen } from "lucide-react"
+import { Calendar, Clock, MapPin, X, UserCheck, Users, BookOpen, Building2 } from "lucide-react"
 import { cancelBooking } from "@/app/actions/bookings"
 import { useState } from "react"
 
@@ -16,6 +16,7 @@ interface Booking {
   instructorName?: string
   trainingOrder?: string
   participants?: number
+  department?: string
   classroom: {
     name: string
   }
@@ -50,6 +51,17 @@ export function BookingList({ bookings, scrollHeight = "60vh" }: BookingListProp
       default:
         return "⏳"
     }
+  }
+
+  const isBulkBooking = (purpose: string) => {
+    return purpose.startsWith("BULK_BOOKING:")
+  }
+
+  const getBulkBookingInfo = (purpose: string) => {
+    if (!isBulkBooking(purpose)) return null
+    const [, datesStr, actualPurpose] = purpose.split(":", 3)
+    const dates = datesStr.split(",")
+    return { dates, actualPurpose }
   }
 
   const handleCancelBooking = async (bookingId: string) => {
@@ -96,102 +108,143 @@ export function BookingList({ bookings, scrollHeight = "60vh" }: BookingListProp
         style={{ maxHeight: scrollHeight }}
         aria-label="Your bookings list"
       >
-        {bookings.map((booking) => (
-          <Card
-            key={booking.id}
-            className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50 hover:shadow-xl transition-shadow duration-200"
-          >
-            {message && message.id === booking.id && (
-              <div
-                className={`mx-4 mt-4 p-3 rounded-lg flex items-center gap-2 ${
-                  message.type === "success"
-                    ? "bg-green-50 text-green-800 border border-green-200"
-                    : "bg-red-50 text-red-800 border border-red-200"
-                }`}
-              >
-                <span className="text-sm">{message.text}</span>
-              </div>
-            )}
+        {bookings.map((booking) => {
+          const bulkInfo = getBulkBookingInfo(booking.purpose)
+          const displayPurpose = bulkInfo ? bulkInfo.actualPurpose : booking.purpose
 
-            <CardHeader className="pb-3">
-              <div className="flex justify-between items-start">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-blue-600" />
-                  {booking.classroom.name}
-                </CardTitle>
-                <Badge className={`${getStatusColor(booking.status)} font-medium`}>
-                  <span className="mr-1">{getStatusIcon(booking.status)}</span>
-                  {booking.status}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <Calendar className="h-4 w-4" />
-                <span className="font-medium">
-                  {new Date(booking.startTime).toLocaleDateString("en-US", {
-                    weekday: "long",
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <Clock className="h-4 w-4" />
-                <span>
-                  {new Date(booking.startTime).toLocaleTimeString("en-US", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}{" "}
-                  -{" "}
-                  {new Date(booking.endTime).toLocaleTimeString("en-US", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-              </div>
-              {booking.instructorName && (
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <UserCheck className="h-4 w-4" />
-                  <span>Instructor: {booking.instructorName}</span>
+          return (
+            <Card
+              key={booking.id}
+              className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50 hover:shadow-xl transition-shadow duration-200"
+            >
+              {message && message.id === booking.id && (
+                <div
+                  className={`mx-4 mt-4 p-3 rounded-lg flex items-center gap-2 ${
+                    message.type === "success"
+                      ? "bg-green-50 text-green-800 border border-green-200"
+                      : "bg-red-50 text-red-800 border border-red-200"
+                  }`}
+                >
+                  <span className="text-sm">{message.text}</span>
                 </div>
               )}
-              {booking.trainingOrder && (
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <MapPin className="h-4 w-4" />
-                  <span>Training Order: {booking.trainingOrder}</span>
-                </div>
-              )}
-              {typeof booking.participants === "number" && (
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Users className="h-4 w-4" />
-                  <span>{booking.participants} participants</span>
-                </div>
-              )}
-              <div className="flex items-start gap-2 text-sm text-gray-600">
-                <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                <span className="line-clamp-2">Course: {booking.purpose}</span>
-              </div>
 
-              {(booking.status === "PENDING" ||
-                (booking.status === "APPROVED" && new Date(booking.startTime) > new Date())) && (
-                <div className="pt-2 border-t border-gray-100">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 bg-transparent"
-                    onClick={() => handleCancelBooking(booking.id)}
-                    disabled={isLoading === booking.id}
-                  >
-                    <X className="h-4 w-4 mr-1" />
-                    {isLoading === booking.id ? "Cancelling..." : "Cancel Booking"}
-                  </Button>
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-start">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-blue-600" />
+                    {booking.classroom.name}
+                    {bulkInfo && (
+                      <Badge variant="outline" className="ml-2">
+                        Bulk ({bulkInfo.dates.length} dates)
+                      </Badge>
+                    )}
+                  </CardTitle>
+                  <Badge className={`${getStatusColor(booking.status)} font-medium`}>
+                    <span className="mr-1">{getStatusIcon(booking.status)}</span>
+                    {booking.status}
+                  </Badge>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {bulkInfo ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <Calendar className="h-4 w-4" />
+                      <span className="font-medium">Bulk Booking ({bulkInfo.dates.length} dates)</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <Clock className="h-4 w-4" />
+                      <span>
+                        {new Date(booking.startTime).toLocaleTimeString("en-US", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}{" "}
+                        -{" "}
+                        {new Date(booking.endTime).toLocaleTimeString("en-US", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <Calendar className="h-4 w-4" />
+                      <span className="font-medium">
+                        {new Date(booking.startTime).toLocaleDateString("en-US", {
+                          weekday: "long",
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <Clock className="h-4 w-4" />
+                      <span>
+                        {new Date(booking.startTime).toLocaleTimeString("en-US", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}{" "}
+                        -{" "}
+                        {new Date(booking.endTime).toLocaleTimeString("en-US", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                  </>
+                )}
+                {booking.instructorName && (
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <UserCheck className="h-4 w-4" />
+                    <span>Instructor: {booking.instructorName}</span>
+                  </div>
+                )}
+                {booking.trainingOrder && (
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <MapPin className="h-4 w-4" />
+                    <span>Training Order: {booking.trainingOrder}</span>
+                  </div>
+                )}
+                {typeof booking.participants === "number" && (
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <Users className="h-4 w-4" />
+                    <span>{booking.participants} participants</span>
+                  </div>
+                )}
+                {booking.department && (
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <Building2 className="h-4 w-4" />
+                    <span>Department: {booking.department}</span>
+                  </div>
+                )}
+                <div className="flex items-start gap-2 text-sm text-gray-600">
+                  <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <span className="line-clamp-2">Course: {displayPurpose}</span>
+                </div>
+
+                {(booking.status === "PENDING" ||
+                  (booking.status === "APPROVED" && new Date(booking.startTime) > new Date())) && (
+                  <div className="pt-2 border-t border-gray-100">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 bg-transparent"
+                      onClick={() => handleCancelBooking(booking.id)}
+                      disabled={isLoading === booking.id}
+                    >
+                      <X className="h-4 w-4 mr-1" />
+                      {isLoading === booking.id ? "Cancelling..." : "Cancel Booking"}
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
     </div>
   )
