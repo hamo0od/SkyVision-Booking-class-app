@@ -1,3 +1,6 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -18,6 +21,8 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   bookings     Booking[]
+
+  @@map("users")
 }
 
 model Classroom {
@@ -28,6 +33,8 @@ model Classroom {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   bookings    Booking[]
+
+  @@map("classrooms")
 }
 
 model Booking {
@@ -42,7 +49,7 @@ model Booking {
   instructorName        String
   trainingOrder         String
   courseReference       String?
-  department            String        // New department field
+  department            String?       // New department field
   ecaaInstructorApproval Boolean      @default(false)
   ecaaApprovalNumber    String?
   qualifications        String?
@@ -56,6 +63,7 @@ model Booking {
   classroom             Classroom     @relation(fields: [classroomId], references: [id])
   
   @@unique([classroomId, startTime, endTime])
+  @@map("bookings")
 }
 
 enum Role {

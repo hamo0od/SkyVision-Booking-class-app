@@ -340,36 +340,65 @@ export async function updateBookingStatus(bookingId: string, status: "APPROVED" 
       const [, datesStr, actualPurpose] = booking.purpose.split(":", 3)
       const dates = datesStr.split(",")
 
-      // Create individual bookings for each date
-      const bookings = dates.map((dateStr) => {
-        const bookingStartTime = new Date(`${dateStr}T${booking.startTime.toTimeString().split(" ")[0]}`)
-        const bookingEndTime = new Date(`${dateStr}T${booking.endTime.toTimeString().split(" ")[0]}`)
+      // Get the time components from the original booking
+      const originalStartTime = new Date(booking.startTime)
+      const originalEndTime = new Date(booking.endTime)
 
-        return {
-          userId: booking.userId,
-          classroomId: booking.classroomId,
-          startTime: bookingStartTime,
-          endTime: bookingEndTime,
-          purpose: actualPurpose,
-          status: "APPROVED" as const,
-          participants: booking.participants,
-          instructorName: booking.instructorName,
-          trainingOrder: booking.trainingOrder,
-          courseReference: booking.courseReference,
-          department: booking.department,
-          ecaaInstructorApproval: booking.ecaaInstructorApproval,
-          ecaaApprovalNumber: booking.ecaaApprovalNumber,
-          qualifications: booking.qualifications,
-          ecaaApprovalFile: booking.ecaaApprovalFile,
-          trainingOrderFile: booking.trainingOrderFile,
-          bulkBookingId: booking.bulkBookingId,
+      // Extract time components (hours, minutes, seconds)
+      const startHours = originalStartTime.getHours()
+      const startMinutes = originalStartTime.getMinutes()
+      const startSeconds = originalStartTime.getSeconds()
+
+      const endHours = originalEndTime.getHours()
+      const endMinutes = originalEndTime.getMinutes()
+      const endSeconds = originalEndTime.getSeconds()
+
+      // Create individual bookings for each date one by one to avoid unique constraint issues
+      for (const dateStr of dates) {
+        // Create new Date objects for each specific date with the same time
+        const bookingStartTime = new Date(dateStr)
+        bookingStartTime.setHours(startHours, startMinutes, startSeconds, 0)
+
+        const bookingEndTime = new Date(dateStr)
+        bookingEndTime.setHours(endHours, endMinutes, endSeconds, 0)
+
+        // Check if this specific time slot is already booked
+        const existingBooking = await prisma.booking.findFirst({
+          where: {
+            classroomId: booking.classroomId,
+            startTime: bookingStartTime,
+            endTime: bookingEndTime,
+            status: { in: ["PENDING", "APPROVED"] },
+          },
+        })
+
+        if (existingBooking) {
+          console.warn(`Skipping duplicate booking for ${dateStr} - already exists`)
+          continue
         }
-      })
 
-      // Create all individual bookings
-      await prisma.booking.createMany({
-        data: bookings,
-      })
+        await prisma.booking.create({
+          data: {
+            userId: booking.userId,
+            classroomId: booking.classroomId,
+            startTime: bookingStartTime,
+            endTime: bookingEndTime,
+            purpose: actualPurpose,
+            status: "APPROVED",
+            participants: booking.participants,
+            instructorName: booking.instructorName,
+            trainingOrder: booking.trainingOrder,
+            courseReference: booking.courseReference,
+            department: booking.department,
+            ecaaInstructorApproval: booking.ecaaInstructorApproval,
+            ecaaApprovalNumber: booking.ecaaApprovalNumber,
+            qualifications: booking.qualifications,
+            ecaaApprovalFile: booking.ecaaApprovalFile,
+            trainingOrderFile: booking.trainingOrderFile,
+            bulkBookingId: booking.bulkBookingId,
+          },
+        })
+      }
 
       // Delete the original bulk booking request
       await prisma.booking.delete({
