@@ -1,103 +1,106 @@
 "use server"
 
 import { prisma } from "@/lib/db"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 
-export async function getTimelineBookings(selectedDate: string) {
+export async function getTimelineBookings(date: string) {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.user?.email) {
+    throw new Error("Unauthorized")
+  }
+
   try {
-    // Get all classrooms
-    const classrooms = await prisma.classroom.findMany({
-      orderBy: { name: "asc" },
-    })
-
-    // Parse the selected date
-    const startOfDay = new Date(selectedDate)
+    const startOfDay = new Date(date)
     startOfDay.setHours(0, 0, 0, 0)
 
-    const endOfDay = new Date(selectedDate)
+    const endOfDay = new Date(date)
     endOfDay.setHours(23, 59, 59, 999)
 
-    // Get all bookings for the selected date
-    const bookings = await prisma.booking.findMany({
+    // Get regular bookings for the specific date
+    const regularBookings = await prisma.booking.findMany({
       where: {
+        startTime: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
         status: { in: ["PENDING", "APPROVED"] },
-        OR: [
-          // Regular bookings that fall on this date
-          {
-            AND: [
-              { startTime: { gte: startOfDay } },
-              { startTime: { lte: endOfDay } },
-              { NOT: { purpose: { startsWith: "BULK_BOOKING:" } } },
-            ],
-          },
-          // Bulk bookings that include this date
-          {
-            AND: [{ purpose: { startsWith: "BULK_BOOKING:" } }, { purpose: { contains: selectedDate } }],
-          },
-        ],
-      },
-      include: {
-        user: {
-          select: {
-            name: true,
-            username: true,
+        NOT: {
+          purpose: {
+            startsWith: "BULK_BOOKING:",
           },
         },
-        classroom: {
+      },
+      include: {
+        classroom: true,
+        user: {
           select: {
             id: true,
             name: true,
-            capacity: true,
+            email: true,
           },
         },
       },
-      orderBy: { startTime: "asc" },
+      orderBy: {
+        startTime: "asc",
+      },
     })
 
-    // Process bulk bookings to create individual booking entries for the timeline
-    const processedBookings = []
+    // Get bulk bookings that include this date
+    const bulkBookings = await prisma.booking.findMany({
+      where: {
+        purpose: {
+          startsWith: "BULK_BOOKING:",
+        },
+        status: { in: ["PENDING", "APPROVED"] },
+      },
+      include: {
+        classroom: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    })
 
-    for (const booking of bookings) {
-      if (booking.purpose.startsWith("BULK_BOOKING:")) {
-        // Extract dates from bulk booking
-        const [, datesStr] = booking.purpose.split(":", 3)
-        const dates = datesStr.split(",")
+    // Process bulk bookings to extract individual date entries
+    const bulkBookingEntries = []
+    for (const bulkBooking of bulkBookings) {
+      const parts = bulkBooking.purpose.split(":", 3)
+      if (parts.length === 3) {
+        const dates = parts[1].split(",")
+        const actualPurpose = parts[2]
 
-        // Check if this bulk booking includes the selected date
-        if (dates.includes(selectedDate)) {
+        // Check if the requested date is in this bulk booking
+        if (dates.includes(date)) {
           // Create a booking entry for this specific date
-          const bookingStartTime = new Date(booking.startTime)
-          const bookingEndTime = new Date(booking.endTime)
+          const bookingStartTime = new Date(`${date}T${bulkBooking.startTime.toTimeString().split(" ")[0]}`)
+          const bookingEndTime = new Date(`${date}T${bulkBooking.endTime.toTimeString().split(" ")[0]}`)
 
-          // Create new start/end times for the selected date
-          const dateSpecificStart = new Date(selectedDate)
-          dateSpecificStart.setHours(bookingStartTime.getHours(), bookingStartTime.getMinutes(), 0, 0)
-
-          const dateSpecificEnd = new Date(selectedDate)
-          dateSpecificEnd.setHours(bookingEndTime.getHours(), bookingEndTime.getMinutes(), 0, 0)
-
-          processedBookings.push({
-            ...booking,
-            startTime: dateSpecificStart,
-            endTime: dateSpecificEnd,
-            // Extract the actual purpose from the bulk booking format
-            purpose: booking.purpose.split(":", 3)[2] || booking.purpose,
+          bulkBookingEntries.push({
+            ...bulkBooking,
+            startTime: bookingStartTime,
+            endTime: bookingEndTime,
+            purpose: actualPurpose,
+            originalPurpose: bulkBooking.purpose, // Keep original for reference
           })
         }
-      } else {
-        // Regular booking - add as is
-        processedBookings.push(booking)
       }
     }
 
-    return {
-      bookings: processedBookings,
-      classrooms,
-    }
+    // Combine regular bookings and bulk booking entries
+    const allBookings = [...regularBookings, ...bulkBookingEntries]
+
+    // Sort by start time
+    allBookings.sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
+
+    return allBookings
   } catch (error) {
-    console.error("Failed to fetch timeline bookings:", error)
-    return {
-      bookings: [],
-      classrooms: [],
-    }
+    console.error("Database error:", error)
+    throw new Error("Failed to fetch timeline bookings")
   }
 }

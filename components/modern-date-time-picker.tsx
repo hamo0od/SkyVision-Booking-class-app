@@ -6,6 +6,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { CalendarIcon, Clock, X } from "lucide-react"
 import { format } from "date-fns"
@@ -21,6 +22,11 @@ interface ModernDateTimePickerProps {
   selectedDates?: string[]
   onSelectedDatesChange?: (dates: string[]) => void
   timeOnly?: boolean
+  isStartTime?: boolean
+  isEndTime?: boolean
+  startTime?: Date | null
+  selectedDate?: Date | null
+  onDateChange?: (date: Date | null) => void
 }
 
 export function ModernDateTimePicker({
@@ -34,6 +40,11 @@ export function ModernDateTimePicker({
   selectedDates = [],
   onSelectedDatesChange,
   timeOnly = false,
+  isStartTime = false,
+  isEndTime = false,
+  startTime,
+  selectedDate,
+  onDateChange,
 }: ModernDateTimePickerProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [selectedCalendarDates, setSelectedCalendarDates] = useState<Date[]>([])
@@ -46,6 +57,46 @@ export function ModernDateTimePicker({
     }
   }, [selectedDates, isBulkBooking])
 
+  // Generate time slots in 30-minute intervals
+  const generateTimeSlots = () => {
+    const slots = []
+    const now = new Date()
+    const isToday = selectedDate && format(selectedDate, "yyyy-MM-dd") === format(now, "yyyy-MM-dd")
+
+    for (let hour = 7; hour < 22; hour++) {
+      for (let minute = 0; minute < 60; minute += 30) {
+        const timeSlot = new Date()
+        timeSlot.setHours(hour, minute, 0, 0)
+
+        // If it's today, only show future time slots
+        if (isToday) {
+          const currentTime = new Date()
+          currentTime.setMinutes(currentTime.getMinutes() + 60) // Add 1 hour buffer
+          if (timeSlot <= currentTime) {
+            continue
+          }
+        }
+
+        // For end time, only show slots after start time
+        if (isEndTime && startTime) {
+          const startTimeSlot = new Date()
+          startTimeSlot.setHours(startTime.getHours(), startTime.getMinutes(), 0, 0)
+          if (timeSlot <= startTimeSlot) {
+            continue
+          }
+        }
+
+        slots.push({
+          value: `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`,
+          label: `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`,
+          time: timeSlot,
+        })
+      }
+    }
+
+    return slots
+  }
+
   const handleTimeChange = (timeString: string) => {
     if (timeOnly) {
       // For time-only mode, create a date with today's date but the specified time
@@ -53,10 +104,10 @@ export function ModernDateTimePicker({
       const newDate = new Date()
       newDate.setHours(hours, minutes, 0, 0)
       onChange?.(newDate)
-    } else if (value) {
-      // For datetime mode, update the time part of the existing date
+    } else if (selectedDate) {
+      // For datetime mode with selected date, update the time part
       const [hours, minutes] = timeString.split(":").map(Number)
-      const newDate = new Date(value)
+      const newDate = new Date(selectedDate)
       newDate.setHours(hours, minutes, 0, 0)
       onChange?.(newDate)
     }
@@ -81,39 +132,7 @@ export function ModernDateTimePicker({
       }
     } else {
       // Handle single date selection
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const selectedDate = new Date(date)
-      selectedDate.setHours(0, 0, 0, 0)
-
-      if (value) {
-        // Preserve time if it exists, but adjust if selecting today
-        const newDate = new Date(date)
-        if (selectedDate.getTime() === today.getTime()) {
-          // If selecting today, ensure time is not in the past
-          const now = new Date()
-          const currentHour = now.getHours()
-          const currentMinute = now.getMinutes()
-
-          // Set to next hour if current time has passed
-          newDate.setHours(currentHour + 1, 0, 0, 0)
-        } else {
-          // For future dates, preserve the existing time or set default
-          newDate.setHours(value.getHours(), value.getMinutes(), value.getSeconds())
-        }
-        onChange?.(newDate)
-      } else {
-        // No existing time, set appropriate default
-        if (selectedDate.getTime() === today.getTime()) {
-          // If selecting today, set to next hour
-          const now = new Date()
-          date.setHours(now.getHours() + 1, 0, 0, 0)
-        } else {
-          // For future dates, set to 9 AM
-          date.setHours(9, 0, 0, 0)
-        }
-        onChange?.(date)
-      }
+      onDateChange?.(date)
       setIsOpen(false)
     }
   }
@@ -129,39 +148,6 @@ export function ModernDateTimePicker({
 
   const formatDisplayDate = (date: Date) => {
     return format(date, "PPP") // e.g., "Jan 1, 2024"
-  }
-
-  // Custom day renderer to highlight past dates in red
-  const dayRenderer = (day: Date) => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const dayToCheck = new Date(day)
-    dayToCheck.setHours(0, 0, 0, 0)
-
-    const isPast = dayToCheck < today
-    const isSelected = isBulkBooking ? selectedDates.includes(format(day, "yyyy-MM-dd")) : false
-
-    return (
-      <div
-        className={`
-        w-full h-full flex items-center justify-center
-        ${isPast ? "text-red-500 bg-red-50" : ""}
-        ${isSelected ? "bg-blue-100 text-blue-900 font-semibold" : ""}
-      `}
-      >
-        {day.getDate()}
-      </div>
-    )
-  }
-
-  // Get minimum time for today
-  const getMinTime = () => {
-    if (value && format(value, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd")) {
-      const now = new Date()
-      const nextHour = new Date(now.getTime() + 60 * 60 * 1000) // Add 1 hour
-      return format(nextHour, "HH:mm")
-    }
-    return undefined
   }
 
   if (timeOnly) {
@@ -276,29 +262,29 @@ export function ModernDateTimePicker({
     )
   }
 
-  return (
-    <div className="space-y-2">
-      {label && (
-        <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-          {icon}
-          {label}
-          {required && <span className="text-red-500">*</span>}
-        </Label>
-      )}
+  // For single date selection (non-bulk)
+  if (!isStartTime && !isEndTime) {
+    return (
+      <div className="space-y-2">
+        {label && (
+          <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+            {icon}
+            {label}
+            {required && <span className="text-red-500">*</span>}
+          </Label>
+        )}
 
-      <div className="flex gap-2">
-        {/* Date Picker */}
         <Popover open={isOpen} onOpenChange={setIsOpen}>
           <PopoverTrigger asChild>
-            <Button variant="outline" className="flex-1 justify-start text-left font-normal bg-transparent">
+            <Button variant="outline" className="w-full justify-start text-left font-normal bg-transparent">
               <CalendarIcon className="mr-2 h-4 w-4" />
-              {value ? formatDisplayDate(value) : "Pick a date"}
+              {selectedDate ? formatDisplayDate(selectedDate) : "Pick a date"}
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="start">
             <Calendar
               mode="single"
-              selected={value || undefined}
+              selected={selectedDate || undefined}
               onSelect={handleDateSelect}
               disabled={(date) => {
                 const today = new Date()
@@ -329,19 +315,37 @@ export function ModernDateTimePicker({
           </PopoverContent>
         </Popover>
 
-        {/* Time Input */}
-        <div className="flex items-center gap-1 px-3 py-2 border rounded-md bg-white min-w-[100px]">
-          <Clock className="h-4 w-4 text-gray-400" />
-          <Input
-            type="time"
-            value={value ? formatTime(value) : ""}
-            onChange={(e) => handleTimeChange(e.target.value)}
-            className="border-0 p-0 h-auto focus-visible:ring-0 text-sm"
-            required={required}
-            min={getMinTime()}
-          />
-        </div>
+        {name && <input type="hidden" name={name} value={selectedDate?.toISOString() || ""} />}
       </div>
+    )
+  }
+
+  // For time selection (start/end time)
+  return (
+    <div className="space-y-2">
+      {label && (
+        <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+          {icon}
+          {label}
+          {required && <span className="text-red-500">*</span>}
+        </Label>
+      )}
+
+      <Select value={value ? formatTime(value) : ""} onValueChange={handleTimeChange} disabled={!selectedDate}>
+        <SelectTrigger className="w-full">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-gray-400" />
+            <SelectValue placeholder={selectedDate ? "Select time" : "Select date first"} />
+          </div>
+        </SelectTrigger>
+        <SelectContent>
+          {generateTimeSlots().map((slot) => (
+            <SelectItem key={slot.value} value={slot.value}>
+              {slot.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       {name && <input type="hidden" name={name} value={value?.toISOString() || ""} />}
     </div>
