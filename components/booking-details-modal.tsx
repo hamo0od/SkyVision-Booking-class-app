@@ -23,8 +23,8 @@ import { PDFViewer } from "./pdf-viewer"
 
 interface Booking {
   id: string
-  startTime: Date
-  endTime: Date
+  startTime: Date | string
+  endTime: Date | string
   purpose: string
   status: string
   participants: number
@@ -38,9 +38,9 @@ interface Booking {
   ecaaApprovalFile: string | null
   trainingOrderFile: string | null
   bulkBookingId: string | null
-  user: {
-    name: string | null
-    email: string
+  user?: {
+    name?: string | null
+    email?: string
   }
   classroom: {
     name: string
@@ -97,6 +97,14 @@ export function BookingDetailsModal({ booking, isOpen, onClose }: BookingDetails
   const bulkInfo = getBulkBookingInfo(booking.purpose)
   const displayPurpose = bulkInfo ? bulkInfo.actualPurpose : booking.purpose
 
+  // Safely get user information with fallbacks
+  const userName = booking.user?.name || "Unknown User"
+  const userEmail = booking.user?.email || "No email provided"
+
+  // Convert string dates to Date objects if needed
+  const startTime = typeof booking.startTime === "string" ? new Date(booking.startTime) : booking.startTime
+  const endTime = typeof booking.endTime === "string" ? new Date(booking.endTime) : booking.endTime
+
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
@@ -130,11 +138,11 @@ export function BookingDetailsModal({ booking, isOpen, onClose }: BookingDetails
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-gray-600">Requested By</label>
-                  <p className="text-gray-900">{booking.user.name || booking.user.email}</p>
+                  <p className="text-gray-900">{userName}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-600">Email</label>
-                  <p className="text-gray-900">{booking.user.email}</p>
+                  <p className="text-gray-900">{userEmail}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-600">Classroom</label>
@@ -186,12 +194,12 @@ export function BookingDetailsModal({ booking, isOpen, onClose }: BookingDetails
                     <label className="text-sm font-medium text-gray-600">Session Time</label>
                     <p className="text-gray-900 flex items-center gap-1">
                       <Clock className="h-4 w-4" />
-                      {new Date(booking.startTime).toLocaleTimeString("en-US", {
+                      {startTime.toLocaleTimeString("en-US", {
                         hour: "2-digit",
                         minute: "2-digit",
                       })}{" "}
                       -{" "}
-                      {new Date(booking.endTime).toLocaleTimeString("en-US", {
+                      {endTime.toLocaleTimeString("en-US", {
                         hour: "2-digit",
                         minute: "2-digit",
                       })}
@@ -203,7 +211,7 @@ export function BookingDetailsModal({ booking, isOpen, onClose }: BookingDetails
                   <div>
                     <label className="text-sm font-medium text-gray-600">Date</label>
                     <p className="text-gray-900">
-                      {new Date(booking.startTime).toLocaleDateString("en-US", {
+                      {startTime.toLocaleDateString("en-US", {
                         weekday: "long",
                         year: "numeric",
                         month: "long",
@@ -215,12 +223,12 @@ export function BookingDetailsModal({ booking, isOpen, onClose }: BookingDetails
                     <label className="text-sm font-medium text-gray-600">Time</label>
                     <p className="text-gray-900 flex items-center gap-1">
                       <Clock className="h-4 w-4" />
-                      {new Date(booking.startTime).toLocaleTimeString("en-US", {
+                      {startTime.toLocaleTimeString("en-US", {
                         hour: "2-digit",
                         minute: "2-digit",
                       })}{" "}
                       -{" "}
-                      {new Date(booking.endTime).toLocaleTimeString("en-US", {
+                      {endTime.toLocaleTimeString("en-US", {
                         hour: "2-digit",
                         minute: "2-digit",
                       })}

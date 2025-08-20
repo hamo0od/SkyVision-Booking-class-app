@@ -81,12 +81,37 @@ export function ModernDateTimePicker({
       }
     } else {
       // Handle single date selection
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const selectedDate = new Date(date)
+      selectedDate.setHours(0, 0, 0, 0)
+
       if (value) {
-        // Preserve time if it exists
+        // Preserve time if it exists, but adjust if selecting today
         const newDate = new Date(date)
-        newDate.setHours(value.getHours(), value.getMinutes(), value.getSeconds())
+        if (selectedDate.getTime() === today.getTime()) {
+          // If selecting today, ensure time is not in the past
+          const now = new Date()
+          const currentHour = now.getHours()
+          const currentMinute = now.getMinutes()
+
+          // Set to next hour if current time has passed
+          newDate.setHours(currentHour + 1, 0, 0, 0)
+        } else {
+          // For future dates, preserve the existing time or set default
+          newDate.setHours(value.getHours(), value.getMinutes(), value.getSeconds())
+        }
         onChange?.(newDate)
       } else {
+        // No existing time, set appropriate default
+        if (selectedDate.getTime() === today.getTime()) {
+          // If selecting today, set to next hour
+          const now = new Date()
+          date.setHours(now.getHours() + 1, 0, 0, 0)
+        } else {
+          // For future dates, set to 9 AM
+          date.setHours(9, 0, 0, 0)
+        }
         onChange?.(date)
       }
       setIsOpen(false)
@@ -104,6 +129,39 @@ export function ModernDateTimePicker({
 
   const formatDisplayDate = (date: Date) => {
     return format(date, "PPP") // e.g., "Jan 1, 2024"
+  }
+
+  // Custom day renderer to highlight past dates in red
+  const dayRenderer = (day: Date) => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const dayToCheck = new Date(day)
+    dayToCheck.setHours(0, 0, 0, 0)
+
+    const isPast = dayToCheck < today
+    const isSelected = isBulkBooking ? selectedDates.includes(format(day, "yyyy-MM-dd")) : false
+
+    return (
+      <div
+        className={`
+        w-full h-full flex items-center justify-center
+        ${isPast ? "text-red-500 bg-red-50" : ""}
+        ${isSelected ? "bg-blue-100 text-blue-900 font-semibold" : ""}
+      `}
+      >
+        {day.getDate()}
+      </div>
+    )
+  }
+
+  // Get minimum time for today
+  const getMinTime = () => {
+    if (value && format(value, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd")) {
+      const now = new Date()
+      const nextHour = new Date(now.getTime() + 60 * 60 * 1000) // Add 1 hour
+      return format(nextHour, "HH:mm")
+    }
+    return undefined
   }
 
   if (timeOnly) {
@@ -158,10 +216,31 @@ export function ModernDateTimePicker({
                     onSelectedDatesChange?.(dateStrings)
                   }
                 }}
-                disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                disabled={(date) => {
+                  const today = new Date()
+                  today.setHours(0, 0, 0, 0)
+                  return date < today
+                }}
+                modifiers={{
+                  past: (date) => {
+                    const today = new Date()
+                    today.setHours(0, 0, 0, 0)
+                    return date < today
+                  },
+                }}
+                modifiersStyles={{
+                  past: {
+                    color: "#dc2626",
+                    backgroundColor: "#fef2f2",
+                  },
+                }}
                 initialFocus
               />
               <div className="p-3 border-t">
+                <div className="text-xs text-gray-500 mb-2 flex items-center gap-2">
+                  <span className="inline-block w-3 h-3 bg-red-50 border border-red-200 rounded"></span>
+                  Past dates (unavailable)
+                </div>
                 <Button onClick={() => setIsOpen(false)} className="w-full" size="sm">
                   Done
                 </Button>
@@ -221,9 +300,32 @@ export function ModernDateTimePicker({
               mode="single"
               selected={value || undefined}
               onSelect={handleDateSelect}
-              disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+              disabled={(date) => {
+                const today = new Date()
+                today.setHours(0, 0, 0, 0)
+                return date < today
+              }}
+              modifiers={{
+                past: (date) => {
+                  const today = new Date()
+                  today.setHours(0, 0, 0, 0)
+                  return date < today
+                },
+              }}
+              modifiersStyles={{
+                past: {
+                  color: "#dc2626",
+                  backgroundColor: "#fef2f2",
+                },
+              }}
               initialFocus
             />
+            <div className="p-3 border-t">
+              <div className="text-xs text-gray-500 flex items-center gap-2">
+                <span className="inline-block w-3 h-3 bg-red-50 border border-red-200 rounded"></span>
+                Past dates (unavailable)
+              </div>
+            </div>
           </PopoverContent>
         </Popover>
 
@@ -236,6 +338,7 @@ export function ModernDateTimePicker({
             onChange={(e) => handleTimeChange(e.target.value)}
             className="border-0 p-0 h-auto focus-visible:ring-0 text-sm"
             required={required}
+            min={getMinTime()}
           />
         </div>
       </div>
