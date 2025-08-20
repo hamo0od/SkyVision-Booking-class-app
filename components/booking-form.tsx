@@ -3,15 +3,16 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
+import { createBooking } from "@/app/actions/bookings"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { createBooking } from "@/app/actions/bookings"
 import { ModernDateTimePicker } from "./modern-date-time-picker"
+import { Calendar, Clock, Users, FileText, Upload, AlertCircle, CalendarDays, Building2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface Classroom {
@@ -25,7 +26,7 @@ interface BookingFormProps {
   classrooms: Classroom[]
 }
 
-const departments = [
+const DEPARTMENTS = [
   "Cockpit Training",
   "Cabin Crew",
   "Station",
@@ -42,67 +43,104 @@ const departments = [
 ]
 
 export function BookingForm({ classrooms }: BookingFormProps) {
+  const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [startTime, setStartTime] = useState<Date>()
-  const [endTime, setEndTime] = useState<Date>()
+  const [selectedClassroom, setSelectedClassroom] = useState<string>("")
+  const [startTime, setStartTime] = useState<Date | null>(null)
+  const [endTime, setEndTime] = useState<Date | null>(null)
   const [ecaaInstructorApproval, setEcaaInstructorApproval] = useState<string>("")
   const [isBulkBooking, setIsBulkBooking] = useState(false)
   const [selectedDates, setSelectedDates] = useState<string[]>([])
   const [fileErrors, setFileErrors] = useState<{ ecaa?: string; training?: string }>({})
-  const { toast } = useToast()
 
   // Reset time fields when bulk booking mode changes
   useEffect(() => {
     if (isBulkBooking) {
-      // Reset to 7 AM for bulk bookings
+      // Set default time for bulk booking (7 AM - 8 AM)
       const defaultStart = new Date()
       defaultStart.setHours(7, 0, 0, 0)
       const defaultEnd = new Date()
       defaultEnd.setHours(8, 0, 0, 0)
-
       setStartTime(defaultStart)
       setEndTime(defaultEnd)
     } else {
-      // Reset to current time for regular bookings
-      setStartTime(undefined)
-      setEndTime(undefined)
+      setStartTime(null)
+      setEndTime(null)
     }
+    setSelectedDates([])
   }, [isBulkBooking])
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, fileType: "ecaa" | "training") => {
     const file = event.target.files?.[0]
     if (file) {
-      const maxSize = 10 * 1024 * 1024 // 10MB
-      if (file.size > maxSize) {
+      // Check file size (10MB limit)
+      if (file.size > 10 * 1024 * 1024) {
         setFileErrors((prev) => ({
           ...prev,
-          [fileType]: `File size must be less than 10MB. Current size: ${(file.size / (1024 * 1024)).toFixed(1)}MB`,
+          [fileType]: "File size must be less than 10MB",
         }))
         // Clear the file input
         event.target.value = ""
-      } else {
+        return
+      }
+
+      // Check file type
+      if (file.type !== "application/pdf") {
         setFileErrors((prev) => ({
           ...prev,
-          [fileType]: undefined,
+          [fileType]: "Only PDF files are allowed",
         }))
+        // Clear the file input
+        event.target.value = ""
+        return
       }
+
+      // Clear any previous errors for this file type
+      setFileErrors((prev) => ({
+        ...prev,
+        [fileType]: undefined,
+      }))
     }
   }
 
-  async function handleSubmit(formData: FormData) {
+  const getDuration = () => {
+    if (!startTime || !endTime) return ""
+    const diffMs = endTime.getTime() - startTime.getTime()
+    const diffHours = diffMs / (1000 * 60 * 60)
+    const hours = Math.floor(diffHours)
+    const minutes = Math.round((diffHours - hours) * 60)
+    return `${hours}h ${minutes}m`
+  }
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
     setIsSubmitting(true)
+
     try {
+      const formData = new FormData(event.currentTarget)
+
+      // Add bulk booking data
+      formData.set("isBulkBooking", isBulkBooking.toString())
+      if (isBulkBooking) {
+        selectedDates.forEach((date) => {
+          formData.append("selectedDates", date)
+        })
+      }
+
       const result = await createBooking(formData)
+
       if (result.success) {
         toast({
-          title: "Success",
+          title: "Success!",
           description: result.message,
         })
+
         // Reset form
-        const form = document.getElementById("booking-form") as HTMLFormElement
-        form?.reset()
-        setStartTime(undefined)
-        setEndTime(undefined)
+        const form = event.currentTarget
+        form.reset()
+        setSelectedClassroom("")
+        setStartTime(null)
+        setEndTime(null)
         setEcaaInstructorApproval("")
         setIsBulkBooking(false)
         setSelectedDates([])
@@ -119,158 +157,237 @@ export function BookingForm({ classrooms }: BookingFormProps) {
     }
   }
 
-  const getDuration = () => {
-    if (!startTime || !endTime) return ""
-    const diffMs = endTime.getTime() - startTime.getTime()
-    const diffHours = diffMs / (1000 * 60 * 60)
-    const hours = Math.floor(diffHours)
-    const minutes = Math.round((diffHours - hours) * 60)
-    return `${hours}h ${minutes}m`
-  }
+  const selectedClassroomData = classrooms.find((c) => c.id === selectedClassroom)
 
   return (
-    <Card className="w-full max-w-2xl mx-auto">
-      <CardHeader>
-        <CardTitle>Book a Classroom</CardTitle>
-        <CardDescription>Fill out the form below to request a classroom booking.</CardDescription>
+    <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50">
+      <CardHeader className="pb-6">
+        <CardTitle className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <Calendar className="h-6 w-6 text-blue-600" />
+          Book a Classroom
+        </CardTitle>
       </CardHeader>
       <CardContent>
-        <form id="booking-form" action={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="classroomId">Classroom *</Label>
-              <Select name="classroomId" required>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a classroom" />
-                </SelectTrigger>
-                <SelectContent>
-                  {classrooms.map((classroom) => (
-                    <SelectItem key={classroom.id} value={classroom.id}>
-                      {classroom.name} (Capacity: {classroom.capacity})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Bulk Booking Toggle */}
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="bulkBooking"
+                checked={isBulkBooking}
+                onChange={(e) => setIsBulkBooking(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <Label htmlFor="bulkBooking" className="flex items-center gap-2 font-medium text-blue-900">
+                <CalendarDays className="h-4 w-4" />
+                Bulk Booking (Multiple Dates)
+              </Label>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="participants">Number of Participants *</Label>
-              <Input id="participants" name="participants" type="number" min="1" defaultValue="1" required />
-            </div>
+            {isBulkBooking && (
+              <p className="text-sm text-blue-700 mt-2">
+                Select multiple dates for the same time slot and session details.
+              </p>
+            )}
           </div>
 
+          {/* Classroom Selection */}
           <div className="space-y-2">
-            <Label htmlFor="department">Department *</Label>
+            <Label htmlFor="classroomId" className="text-sm font-medium text-gray-700">
+              Classroom *
+            </Label>
+            <Select name="classroomId" value={selectedClassroom} onValueChange={setSelectedClassroom} required>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a classroom" />
+              </SelectTrigger>
+              <SelectContent>
+                {classrooms.map((classroom) => (
+                  <SelectItem key={classroom.id} value={classroom.id}>
+                    {classroom.name} (Capacity: {classroom.capacity})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedClassroomData?.description && (
+              <p className="text-sm text-gray-600">{selectedClassroomData.description}</p>
+            )}
+          </div>
+
+          {/* Department Selection */}
+          <div className="space-y-2">
+            <Label htmlFor="department" className="text-sm font-medium text-gray-700 flex items-center gap-2">
+              <Building2 className="h-4 w-4" />
+              Department *
+            </Label>
             <Select name="department" required>
-              <SelectTrigger>
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select your department" />
               </SelectTrigger>
               <SelectContent>
-                {departments.map((dept) => (
-                  <SelectItem key={dept} value={dept}>
-                    {dept}
+                {DEPARTMENTS.map((department) => (
+                  <SelectItem key={department} value={department}>
+                    {department}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-4">
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                id="isBulkBooking"
-                name="isBulkBooking"
-                checked={isBulkBooking}
-                onChange={(e) => setIsBulkBooking(e.target.checked)}
-                className="rounded border-gray-300"
+          {/* Date and Time Selection */}
+          {isBulkBooking ? (
+            <div className="space-y-4">
+              <ModernDateTimePicker
+                label="Select Multiple Dates"
+                icon={<CalendarDays className="h-4 w-4" />}
+                isBulkBooking={true}
+                selectedDates={selectedDates}
+                onSelectedDatesChange={setSelectedDates}
+                required
               />
-              <Label htmlFor="isBulkBooking">Bulk Booking (multiple dates)</Label>
-            </div>
 
-            {isBulkBooking ? (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Select Multiple Dates *</Label>
-                  <ModernDateTimePicker
-                    mode="multiple-dates"
-                    selectedDates={selectedDates}
-                    onDatesChange={setSelectedDates}
-                    startTime={startTime}
-                    endTime={endTime}
-                    onStartTimeChange={setStartTime}
-                    onEndTimeChange={setEndTime}
-                  />
-                  {selectedDates.map((date) => (
-                    <input key={date} type="hidden" name="selectedDates" value={date} />
-                  ))}
-                </div>
-              </div>
-            ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Start Date & Time *</Label>
-                  <ModernDateTimePicker mode="datetime" value={startTime} onChange={setStartTime} />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>End Date & Time *</Label>
-                  <ModernDateTimePicker mode="datetime" value={endTime} onChange={setEndTime} />
-                </div>
+                <ModernDateTimePicker
+                  label="Start Time"
+                  icon={<Clock className="h-4 w-4" />}
+                  value={startTime}
+                  onChange={setStartTime}
+                  name="startTime"
+                  timeOnly={true}
+                  required
+                />
+                <ModernDateTimePicker
+                  label="End Time"
+                  icon={<Clock className="h-4 w-4" />}
+                  value={endTime}
+                  onChange={setEndTime}
+                  name="endTime"
+                  timeOnly={true}
+                  required
+                />
               </div>
-            )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <ModernDateTimePicker
+                label="Start Date & Time"
+                icon={<Calendar className="h-4 w-4" />}
+                value={startTime}
+                onChange={setStartTime}
+                name="startTime"
+                required
+              />
+              <ModernDateTimePicker
+                label="End Date & Time"
+                icon={<Clock className="h-4 w-4" />}
+                value={endTime}
+                onChange={setEndTime}
+                name="endTime"
+                required
+              />
+            </div>
+          )}
 
-            {startTime && endTime && <div className="text-sm text-gray-600">Duration: {getDuration()}</div>}
+          {/* Duration Display */}
+          {startTime && endTime && (
+            <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+              <p className="text-sm text-green-800">
+                <strong>Duration:</strong> {getDuration()}
+                {isBulkBooking && selectedDates.length > 0 && (
+                  <span className="ml-2">
+                    • <strong>{selectedDates.length} dates selected</strong>
+                  </span>
+                )}
+              </p>
+            </div>
+          )}
 
-            <input type="hidden" name="startTime" value={startTime?.toISOString() || ""} />
-            <input type="hidden" name="endTime" value={endTime?.toISOString() || ""} />
-            <input type="hidden" name="isBulkBooking" value={isBulkBooking.toString()} />
+          {/* Course Title */}
+          <div className="space-y-2">
+            <Label htmlFor="purpose" className="text-sm font-medium text-gray-700">
+              Course Title *
+            </Label>
+            <Textarea
+              id="purpose"
+              name="purpose"
+              placeholder="Enter the course title or training purpose"
+              className="min-h-[80px] resize-none"
+              required
+            />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="purpose">Purpose/Description *</Label>
-            <Textarea id="purpose" name="purpose" placeholder="Describe the purpose of your booking..." required />
+          {/* Training Details */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="instructorName" className="text-sm font-medium text-gray-700">
+                Instructor Name *
+              </Label>
+              <Input id="instructorName" name="instructorName" placeholder="Enter instructor's full name" required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="participants" className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Number of Participants *
+              </Label>
+              <Input
+                id="participants"
+                name="participants"
+                type="number"
+                min="1"
+                max={selectedClassroomData?.capacity || 100}
+                placeholder="Enter number of participants"
+                required
+              />
+              {selectedClassroomData && (
+                <p className="text-xs text-gray-500">Maximum capacity: {selectedClassroomData.capacity}</p>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="instructorName">Instructor Name *</Label>
-              <Input id="instructorName" name="instructorName" placeholder="Enter instructor name" required />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="trainingOrder">Training Order *</Label>
+              <Label htmlFor="trainingOrder" className="text-sm font-medium text-gray-700">
+                Training Order *
+              </Label>
               <Input id="trainingOrder" name="trainingOrder" placeholder="Enter training order number" required />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="courseReference" className="text-sm font-medium text-gray-700">
+                Course Reference
+              </Label>
+              <Input id="courseReference" name="courseReference" placeholder="Enter course reference (optional)" />
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="courseReference">Course Reference</Label>
-            <Input id="courseReference" name="courseReference" placeholder="Enter course reference (optional)" />
-          </div>
-
-          <div className="space-y-4">
-            <Label>ECAA Instructor Approval *</Label>
+          {/* ECAA Instructor Approval */}
+          <div className="space-y-4 bg-purple-50 p-4 rounded-lg border border-purple-200">
+            <Label className="text-sm font-medium text-gray-700">ECAA Instructor Approval Status *</Label>
             <RadioGroup
+              name="ecaaInstructorApproval"
               value={ecaaInstructorApproval}
               onValueChange={setEcaaInstructorApproval}
-              name="ecaaInstructorApproval"
+              className="flex flex-col space-y-2"
               required
             >
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="true" id="ecaa-yes" />
-                <Label htmlFor="ecaa-yes">Yes, I have ECAA instructor approval</Label>
+                <Label htmlFor="ecaa-yes" className="text-sm">
+                  Yes, I have ECAA instructor approval
+                </Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="false" id="ecaa-no" />
-                <Label htmlFor="ecaa-no">No, I don't have ECAA instructor approval</Label>
+                <Label htmlFor="ecaa-no" className="text-sm">
+                  No, I don't have ECAA instructor approval
+                </Label>
               </div>
             </RadioGroup>
 
             {ecaaInstructorApproval === "true" && (
-              <div className="space-y-4 pl-6 border-l-2 border-blue-200">
+              <div className="space-y-4 mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
                 <div className="space-y-2">
-                  <Label htmlFor="ecaaApprovalNumber">ECAA Approval Number *</Label>
+                  <Label htmlFor="ecaaApprovalNumber" className="text-sm font-medium text-gray-700">
+                    ECAA Approval Number *
+                  </Label>
                   <Input
                     id="ecaaApprovalNumber"
                     name="ecaaApprovalNumber"
@@ -279,50 +396,98 @@ export function BookingForm({ classrooms }: BookingFormProps) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="ecaaApprovalFile">ECAA Approval PDF *</Label>
-                  <Input
-                    id="ecaaApprovalFile"
-                    name="ecaaApprovalFile"
-                    type="file"
-                    accept=".pdf"
-                    onChange={(e) => handleFileChange(e, "ecaa")}
-                    required
-                  />
-                  {fileErrors.ecaa && <p className="text-sm text-red-600">{fileErrors.ecaa}</p>}
+                  <Label
+                    htmlFor="ecaaApprovalFile"
+                    className="text-sm font-medium text-gray-700 flex items-center gap-2"
+                  >
+                    <FileText className="h-4 w-4" />
+                    ECAA Approval PDF *
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="ecaaApprovalFile"
+                      name="ecaaApprovalFile"
+                      type="file"
+                      accept=".pdf"
+                      onChange={(e) => handleFileChange(e, "ecaa")}
+                      className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                      required
+                    />
+                    <Upload className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                  </div>
+                  {fileErrors.ecaa && (
+                    <div className="flex items-center gap-2 text-red-600 text-sm">
+                      <AlertCircle className="h-4 w-4" />
+                      {fileErrors.ecaa}
+                    </div>
+                  )}
                   <p className="text-xs text-gray-500">Upload your ECAA approval document (PDF only, max 10MB)</p>
                 </div>
               </div>
             )}
 
             {ecaaInstructorApproval === "false" && (
-              <div className="space-y-2 pl-6 border-l-2 border-orange-200">
-                <Label htmlFor="qualifications">Your Qualifications *</Label>
+              <div className="space-y-2 mt-4 p-4 bg-orange-50 rounded-lg border border-orange-200">
+                <Label htmlFor="qualifications" className="text-sm font-medium text-gray-700">
+                  Your Qualifications *
+                </Label>
                 <Textarea
                   id="qualifications"
                   name="qualifications"
-                  placeholder="Please describe your relevant qualifications and experience..."
+                  placeholder="Please describe your relevant qualifications and experience"
+                  className="min-h-[80px] resize-none"
                   required
                 />
               </div>
             )}
           </div>
 
+          {/* Training Order File Upload */}
           <div className="space-y-2">
-            <Label htmlFor="trainingOrderFile">Training Order PDF *</Label>
-            <Input
-              id="trainingOrderFile"
-              name="trainingOrderFile"
-              type="file"
-              accept=".pdf"
-              onChange={(e) => handleFileChange(e, "training")}
-              required
-            />
-            {fileErrors.training && <p className="text-sm text-red-600">{fileErrors.training}</p>}
+            <Label htmlFor="trainingOrderFile" className="text-sm font-medium text-gray-700 flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Training Order PDF *
+            </Label>
+            <div className="relative">
+              <Input
+                id="trainingOrderFile"
+                name="trainingOrderFile"
+                type="file"
+                accept=".pdf"
+                onChange={(e) => handleFileChange(e, "training")}
+                className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                required
+              />
+              <Upload className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            </div>
+            {fileErrors.training && (
+              <div className="flex items-center gap-2 text-red-600 text-sm">
+                <AlertCircle className="h-4 w-4" />
+                {fileErrors.training}
+              </div>
+            )}
             <p className="text-xs text-gray-500">Upload your training order document (PDF only, max 10MB)</p>
           </div>
 
-          <Button type="submit" disabled={isSubmitting} className="w-full">
-            {isSubmitting ? "Submitting..." : "Submit Booking Request"}
+          {/* Submit Button */}
+          <Button
+            type="submit"
+            disabled={
+              isSubmitting || Object.values(fileErrors).some(Boolean) || (isBulkBooking && selectedDates.length === 0)
+            }
+            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3 px-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
+          >
+            {isSubmitting ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                {isBulkBooking ? "Creating Bulk Booking..." : "Creating Booking..."}
+              </>
+            ) : (
+              <>
+                <Calendar className="h-4 w-4 mr-2" />
+                {isBulkBooking ? "Submit Bulk Booking Request" : "Submit Booking Request"}
+              </>
+            )}
           </Button>
         </form>
       </CardContent>

@@ -72,6 +72,10 @@ export async function createBooking(formData: FormData) {
     throw new Error("All fields are required")
   }
 
+  if (isBulkBooking && selectedDates.length === 0) {
+    throw new Error("Please select at least one date for bulk booking")
+  }
+
   if (!trainingOrderFile) {
     throw new Error("Training order PDF file is required")
   }
@@ -184,7 +188,7 @@ export async function createBooking(formData: FormData) {
 
   try {
     if (isBulkBooking && selectedDates.length > 0) {
-      // Handle bulk booking - create ONE booking with multiple dates stored as JSON
+      // Handle bulk booking - create ONE booking with multiple dates stored in purpose
       const bulkBookingId = `bulk-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
       // Check for conflicts for each date
@@ -219,13 +223,13 @@ export async function createBooking(formData: FormData) {
       }
 
       // Create a single booking record representing the bulk booking
-      // Use the first date for the main booking record
+      // Store all selected dates in the purpose field with a special format
+      const bulkPurpose = `BULK_BOOKING:${selectedDates.join(",")}:${purpose}`
+
+      // Use the first date for the main booking record's start/end times
       const firstDate = selectedDates[0]
       const firstBookingStartTime = new Date(`${firstDate}T${startTime.toTimeString().split(" ")[0]}`)
       const firstBookingEndTime = new Date(`${firstDate}T${endTime.toTimeString().split(" ")[0]}`)
-
-      // Store all selected dates in the purpose field with a special format
-      const bulkPurpose = `BULK_BOOKING:${selectedDates.join(",")}:${purpose}`
 
       await prisma.booking.create({
         data: {
@@ -335,84 +339,15 @@ export async function updateBookingStatus(bookingId: string, status: "APPROVED" 
       throw new Error("Booking not found")
     }
 
-    // If this is a bulk booking and being approved, create individual bookings for each date
-    if (status === "APPROVED" && booking.purpose.startsWith("BULK_BOOKING:")) {
-      const [, datesStr, actualPurpose] = booking.purpose.split(":", 3)
-      const dates = datesStr.split(",")
-
-      // Get the time components from the original booking
-      const originalStartTime = new Date(booking.startTime)
-      const originalEndTime = new Date(booking.endTime)
-
-      // Extract time components (hours, minutes, seconds)
-      const startHours = originalStartTime.getHours()
-      const startMinutes = originalStartTime.getMinutes()
-      const startSeconds = originalStartTime.getSeconds()
-
-      const endHours = originalEndTime.getHours()
-      const endMinutes = originalEndTime.getMinutes()
-      const endSeconds = originalEndTime.getSeconds()
-
-      // Create individual bookings for each date one by one to avoid unique constraint issues
-      for (const dateStr of dates) {
-        // Create new Date objects for each specific date with the same time
-        const bookingStartTime = new Date(dateStr)
-        bookingStartTime.setHours(startHours, startMinutes, startSeconds, 0)
-
-        const bookingEndTime = new Date(dateStr)
-        bookingEndTime.setHours(endHours, endMinutes, endSeconds, 0)
-
-        // Check if this specific time slot is already booked
-        const existingBooking = await prisma.booking.findFirst({
-          where: {
-            classroomId: booking.classroomId,
-            startTime: bookingStartTime,
-            endTime: bookingEndTime,
-            status: { in: ["PENDING", "APPROVED"] },
-          },
-        })
-
-        if (existingBooking) {
-          console.warn(`Skipping duplicate booking for ${dateStr} - already exists`)
-          continue
-        }
-
-        await prisma.booking.create({
-          data: {
-            userId: booking.userId,
-            classroomId: booking.classroomId,
-            startTime: bookingStartTime,
-            endTime: bookingEndTime,
-            purpose: actualPurpose,
-            status: "APPROVED",
-            participants: booking.participants,
-            instructorName: booking.instructorName,
-            trainingOrder: booking.trainingOrder,
-            courseReference: booking.courseReference,
-            department: booking.department,
-            ecaaInstructorApproval: booking.ecaaInstructorApproval,
-            ecaaApprovalNumber: booking.ecaaApprovalNumber,
-            qualifications: booking.qualifications,
-            ecaaApprovalFile: booking.ecaaApprovalFile,
-            trainingOrderFile: booking.trainingOrderFile,
-            bulkBookingId: booking.bulkBookingId,
-          },
-        })
-      }
-
-      // Delete the original bulk booking request
-      await prisma.booking.delete({
-        where: { id: bookingId },
-      })
-    } else {
-      // Regular booking or bulk booking rejection
+    // If this is a bulk booking, just update the status - don't create individual bookings
+    if (booking.purpose.startsWith("BULK_BOOKING:")) {
       await prisma.booking.update({
         where: { id: bookingId },
         data: { status },
       })
 
       // If bulk booking is rejected, delete associated files
-      if (status === "REJECTED" && booking.purpose.startsWith("BULK_BOOKING:")) {
+      if (status === "REJECTED") {
         if (booking.ecaaApprovalFile) {
           await deleteFile(booking.ecaaApprovalFile)
         }
@@ -420,6 +355,12 @@ export async function updateBookingStatus(bookingId: string, status: "APPROVED" 
           await deleteFile(booking.trainingOrderFile)
         }
       }
+    } else {
+      // Regular booking
+      await prisma.booking.update({
+        where: { id: bookingId },
+        data: { status },
+      })
     }
 
     revalidatePath("/admin")

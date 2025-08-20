@@ -1,202 +1,246 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
+import { Calendar } from "@/components/ui/calendar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { X } from "lucide-react"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { CalendarIcon, Clock, X } from "lucide-react"
+import { format } from "date-fns"
 
 interface ModernDateTimePickerProps {
-  mode: "datetime" | "multiple-dates" | "time-only"
-  value?: Date
-  onChange?: (date: Date | undefined) => void
+  label?: string
+  icon?: React.ReactNode
+  value?: Date | null
+  onChange?: (date: Date | null) => void
+  name?: string
+  required?: boolean
+  isBulkBooking?: boolean
   selectedDates?: string[]
-  onDatesChange?: (dates: string[]) => void
-  startTime?: Date
-  endTime?: Date
-  onStartTimeChange?: (time: Date | undefined) => void
-  onEndTimeChange?: (time: Date | undefined) => void
+  onSelectedDatesChange?: (dates: string[]) => void
+  timeOnly?: boolean
 }
 
 export function ModernDateTimePicker({
-  mode,
+  label,
+  icon,
   value,
   onChange,
+  name,
+  required = false,
+  isBulkBooking = false,
   selectedDates = [],
-  onDatesChange,
-  startTime,
-  endTime,
-  onStartTimeChange,
-  onEndTimeChange,
+  onSelectedDatesChange,
+  timeOnly = false,
 }: ModernDateTimePickerProps) {
-  const [tempDate, setTempDate] = useState("")
-  const [tempStartTime, setTempStartTime] = useState("")
-  const [tempEndTime, setTempEndTime] = useState("")
+  const [isOpen, setIsOpen] = useState(false)
+  const [selectedCalendarDates, setSelectedCalendarDates] = useState<Date[]>([])
 
-  // Initialize time fields when mode changes or for bulk bookings
+  // Convert string dates to Date objects for calendar
   useEffect(() => {
-    if (mode === "multiple-dates" || mode === "time-only") {
-      // Set default times to 7 AM - 8 AM for bulk bookings
-      if (!startTime) {
-        const defaultStart = new Date()
-        defaultStart.setHours(7, 0, 0, 0)
-        onStartTimeChange?.(defaultStart)
-        setTempStartTime("07:00")
+    if (isBulkBooking && selectedDates.length > 0) {
+      const dates = selectedDates.map((dateStr) => new Date(dateStr))
+      setSelectedCalendarDates(dates)
+    }
+  }, [selectedDates, isBulkBooking])
+
+  const handleTimeChange = (timeString: string) => {
+    if (timeOnly) {
+      // For time-only mode, create a date with today's date but the specified time
+      const [hours, minutes] = timeString.split(":").map(Number)
+      const newDate = new Date()
+      newDate.setHours(hours, minutes, 0, 0)
+      onChange?.(newDate)
+    } else if (value) {
+      // For datetime mode, update the time part of the existing date
+      const [hours, minutes] = timeString.split(":").map(Number)
+      const newDate = new Date(value)
+      newDate.setHours(hours, minutes, 0, 0)
+      onChange?.(newDate)
+    }
+  }
+
+  const handleDateSelect = (date: Date | undefined) => {
+    if (!date) return
+
+    if (isBulkBooking) {
+      // Handle multiple date selection for bulk booking
+      const dateString = format(date, "yyyy-MM-dd")
+      const currentDates = [...selectedDates]
+
+      if (currentDates.includes(dateString)) {
+        // Remove date if already selected
+        const newDates = currentDates.filter((d) => d !== dateString)
+        onSelectedDatesChange?.(newDates)
       } else {
-        setTempStartTime(startTime.toTimeString().slice(0, 5))
+        // Add date if not selected
+        const newDates = [...currentDates, dateString].sort()
+        onSelectedDatesChange?.(newDates)
       }
-
-      if (!endTime) {
-        const defaultEnd = new Date()
-        defaultEnd.setHours(8, 0, 0, 0)
-        onEndTimeChange?.(defaultEnd)
-        setTempEndTime("08:00")
+    } else {
+      // Handle single date selection
+      if (value) {
+        // Preserve time if it exists
+        const newDate = new Date(date)
+        newDate.setHours(value.getHours(), value.getMinutes(), value.getSeconds())
+        onChange?.(newDate)
       } else {
-        setTempEndTime(endTime.toTimeString().slice(0, 5))
+        onChange?.(date)
       }
-    }
-  }, [mode, startTime, endTime, onStartTimeChange, onEndTimeChange])
-
-  const formatDateForInput = (date: Date) => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, "0")
-    const day = String(date.getDate()).padStart(2, "0")
-    const hours = String(date.getHours()).padStart(2, "0")
-    const minutes = String(date.getMinutes()).padStart(2, "0")
-    return `${year}-${month}-${day}T${hours}:${minutes}`
-  }
-
-  const formatDateOnly = (date: Date) => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, "0")
-    const day = String(date.getDate()).padStart(2, "0")
-    return `${year}-${month}-${day}`
-  }
-
-  const handleDateTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const dateTime = e.target.value
-    if (dateTime && onChange) {
-      onChange(new Date(dateTime))
+      setIsOpen(false)
     }
   }
 
-  const handleDateAdd = () => {
-    if (tempDate && onDatesChange) {
-      if (!selectedDates.includes(tempDate)) {
-        onDatesChange([...selectedDates, tempDate].sort())
-      }
-      setTempDate("")
-    }
+  const removeBulkDate = (dateToRemove: string) => {
+    const newDates = selectedDates.filter((date) => date !== dateToRemove)
+    onSelectedDatesChange?.(newDates)
   }
 
-  const handleDateRemove = (dateToRemove: string) => {
-    if (onDatesChange) {
-      onDatesChange(selectedDates.filter((date) => date !== dateToRemove))
-    }
+  const formatTime = (date: Date) => {
+    return date.toTimeString().slice(0, 5) // HH:MM format
   }
 
-  const handleStartTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const timeValue = e.target.value
-    setTempStartTime(timeValue)
-
-    if (timeValue && onStartTimeChange) {
-      const [hours, minutes] = timeValue.split(":").map(Number)
-      const newTime = new Date()
-      newTime.setHours(hours, minutes, 0, 0)
-      onStartTimeChange(newTime)
-    }
+  const formatDisplayDate = (date: Date) => {
+    return format(date, "PPP") // e.g., "Jan 1, 2024"
   }
 
-  const handleEndTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const timeValue = e.target.value
-    setTempEndTime(timeValue)
-
-    if (timeValue && onEndTimeChange) {
-      const [hours, minutes] = timeValue.split(":").map(Number)
-      const newTime = new Date()
-      newTime.setHours(hours, minutes, 0, 0)
-      onEndTimeChange(newTime)
-    }
-  }
-
-  const getTomorrowDate = () => {
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    return formatDateOnly(tomorrow)
-  }
-
-  if (mode === "datetime") {
+  if (timeOnly) {
     return (
-      <Input
-        type="datetime-local"
-        value={value ? formatDateForInput(value) : ""}
-        onChange={handleDateTimeChange}
-        min={formatDateForInput(new Date())}
-      />
+      <div className="space-y-2">
+        {label && (
+          <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+            {icon}
+            {label}
+            {required && <span className="text-red-500">*</span>}
+          </Label>
+        )}
+        <Input
+          type="time"
+          value={value ? formatTime(value) : "07:00"}
+          onChange={(e) => handleTimeChange(e.target.value)}
+          className="w-full"
+          required={required}
+        />
+        {name && <input type="hidden" name={name} value={value?.toISOString() || ""} />}
+      </div>
     )
   }
 
-  if (mode === "multiple-dates") {
+  if (isBulkBooking) {
     return (
       <div className="space-y-4">
-        <div className="flex gap-2">
-          <Input
-            type="date"
-            value={tempDate}
-            onChange={(e) => setTempDate(e.target.value)}
-            min={getTomorrowDate()}
-            placeholder="Select date"
-          />
-          <Button type="button" onClick={handleDateAdd} disabled={!tempDate}>
-            Add Date
-          </Button>
+        {label && (
+          <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+            {icon}
+            {label}
+            {required && <span className="text-red-500">*</span>}
+          </Label>
+        )}
+
+        {/* Date Selection */}
+        <div className="space-y-2">
+          <Popover open={isOpen} onOpenChange={setIsOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-full justify-start text-left font-normal bg-transparent">
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {selectedDates.length > 0 ? `${selectedDates.length} dates selected` : "Select dates"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="multiple"
+                selected={selectedCalendarDates}
+                onSelect={(dates) => {
+                  if (dates) {
+                    const dateStrings = dates.map((date) => format(date, "yyyy-MM-dd")).sort()
+                    onSelectedDatesChange?.(dateStrings)
+                  }
+                }}
+                disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                initialFocus
+              />
+              <div className="p-3 border-t">
+                <Button onClick={() => setIsOpen(false)} className="w-full" size="sm">
+                  Done
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
 
+        {/* Selected Dates Display */}
         {selectedDates.length > 0 && (
           <div className="space-y-2">
-            <Label>Selected Dates:</Label>
+            <Label className="text-sm font-medium text-gray-600">Selected Dates:</Label>
             <div className="flex flex-wrap gap-2">
-              {selectedDates.map((date) => (
-                <Badge key={date} variant="secondary" className="flex items-center gap-1">
-                  {new Date(date).toLocaleDateString()}
-                  <X className="h-3 w-3 cursor-pointer" onClick={() => handleDateRemove(date)} />
-                </Badge>
+              {selectedDates.map((dateStr) => (
+                <div
+                  key={dateStr}
+                  className="flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-1 rounded-md text-sm"
+                >
+                  <span>{format(new Date(dateStr), "MMM d, yyyy")}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeBulkDate(dateStr)}
+                    className="ml-1 hover:bg-blue-200 rounded-full p-0.5"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
               ))}
             </div>
           </div>
         )}
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Start Time</Label>
-            <Input type="time" value={tempStartTime} onChange={handleStartTimeChange} />
-          </div>
-          <div className="space-y-2">
-            <Label>End Time</Label>
-            <Input type="time" value={tempEndTime} onChange={handleEndTimeChange} />
-          </div>
-        </div>
       </div>
     )
   }
 
-  if (mode === "time-only") {
-    return (
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Start Time</Label>
-          <Input type="time" value={tempStartTime} onChange={handleStartTimeChange} />
-        </div>
-        <div className="space-y-2">
-          <Label>End Time</Label>
-          <Input type="time" value={tempEndTime} onChange={handleEndTimeChange} />
+  return (
+    <div className="space-y-2">
+      {label && (
+        <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+          {icon}
+          {label}
+          {required && <span className="text-red-500">*</span>}
+        </Label>
+      )}
+
+      <div className="flex gap-2">
+        {/* Date Picker */}
+        <Popover open={isOpen} onOpenChange={setIsOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="flex-1 justify-start text-left font-normal bg-transparent">
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {value ? formatDisplayDate(value) : "Pick a date"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={value || undefined}
+              onSelect={handleDateSelect}
+              disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
+
+        {/* Time Input */}
+        <div className="flex items-center gap-1 px-3 py-2 border rounded-md bg-white min-w-[100px]">
+          <Clock className="h-4 w-4 text-gray-400" />
+          <Input
+            type="time"
+            value={value ? formatTime(value) : ""}
+            onChange={(e) => handleTimeChange(e.target.value)}
+            className="border-0 p-0 h-auto focus-visible:ring-0 text-sm"
+            required={required}
+          />
         </div>
       </div>
-    )
-  }
 
-  return null
+      {name && <input type="hidden" name={name} value={value?.toISOString() || ""} />}
+    </div>
+  )
 }
