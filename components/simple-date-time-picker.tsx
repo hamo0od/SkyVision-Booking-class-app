@@ -18,6 +18,7 @@ interface SimpleDateTimePickerProps {
   name?: string
   required?: boolean
   minTime?: string
+  timeOnly?: boolean
 }
 
 export function SimpleDateTimePicker({
@@ -28,6 +29,7 @@ export function SimpleDateTimePicker({
   name,
   required = false,
   minTime,
+  timeOnly = false,
 }: SimpleDateTimePickerProps) {
   const [isOpen, setIsOpen] = useState(false)
 
@@ -106,12 +108,19 @@ export function SimpleDateTimePicker({
   }
 
   const handleTimeChange = (timeString: string) => {
-    if (!value) return
-
     const [hours, minutes] = timeString.split(":").map(Number)
-    const newDate = new Date(value)
-    newDate.setHours(hours, minutes, 0, 0)
-    onChange?.(newDate)
+
+    if (timeOnly) {
+      // For time-only mode, create a date with today's date but the specified time
+      const newDate = new Date()
+      newDate.setHours(hours, minutes, 0, 0)
+      onChange?.(newDate)
+    } else if (value) {
+      // For datetime mode, update the time part of the existing date
+      const newDate = new Date(value)
+      newDate.setHours(hours, minutes, 0, 0)
+      onChange?.(newDate)
+    }
   }
 
   const formatTime = (date: Date) => {
@@ -143,6 +152,37 @@ export function SimpleDateTimePicker({
 
   const timeOptions = getAvailableTimeOptions()
   const currentTimeValue = value ? formatTime(value) : ""
+
+  // For time-only mode, just show time selector
+  if (timeOnly) {
+    return (
+      <div className="space-y-2">
+        {label && (
+          <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+            {icon}
+            {label}
+            {required && <span className="text-red-500">*</span>}
+          </Label>
+        )}
+        <Select value={currentTimeValue} onValueChange={handleTimeChange}>
+          <SelectTrigger className="bg-white">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-gray-400" />
+              <SelectValue placeholder="--:-- --" />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            {timeOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {name && <input type="hidden" name={name} value={value?.toISOString() || ""} />}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-2">

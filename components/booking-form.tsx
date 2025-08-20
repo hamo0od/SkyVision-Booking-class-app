@@ -12,7 +12,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { SimpleDateTimePicker } from "./simple-date-time-picker"
-import { Calendar, Clock, Users, FileText, Upload, AlertCircle, CalendarDays, Building2 } from "lucide-react"
+import { BulkDatePicker } from "./bulk-date-picker"
+import { Calendar, Clock, Users, FileText, Upload, AlertCircle, CalendarDays, Building2, X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface Classroom {
@@ -52,39 +53,50 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   const [ecaaInstructorApproval, setEcaaInstructorApproval] = useState<string>("")
   const [isBulkBooking, setIsBulkBooking] = useState(false)
   const [selectedDates, setSelectedDates] = useState<string[]>([])
+  const [bulkStartTime, setBulkStartTime] = useState<Date | null>(null)
+  const [bulkEndTime, setBulkEndTime] = useState<Date | null>(null)
   const [fileErrors, setFileErrors] = useState<{ ecaa?: string; training?: string }>({})
 
   // Reset time fields when bulk booking mode changes
   useEffect(() => {
     if (isBulkBooking) {
-      // Set default time for bulk booking (7 AM - 8 AM)
-      const defaultStart = new Date()
-      defaultStart.setHours(7, 0, 0, 0)
-      const defaultEnd = new Date()
-      defaultEnd.setHours(8, 0, 0, 0)
-      setStartTime(defaultStart)
-      setEndTime(defaultEnd)
-    } else {
+      // Reset single booking fields
+      setSelectedDate(null)
       setStartTime(null)
       setEndTime(null)
-      setSelectedDate(null)
+
+      // Set default time for bulk booking (9 AM - 10 AM)
+      const defaultStart = new Date()
+      defaultStart.setHours(9, 0, 0, 0)
+      const defaultEnd = new Date()
+      defaultEnd.setHours(10, 0, 0, 0)
+      setBulkStartTime(defaultStart)
+      setBulkEndTime(defaultEnd)
+    } else {
+      // Reset bulk booking fields
+      setSelectedDates([])
+      setBulkStartTime(null)
+      setBulkEndTime(null)
     }
-    setSelectedDates([])
   }, [isBulkBooking])
 
-  // Update start and end times when date changes
+  // Update end time when start time changes (for single booking)
   useEffect(() => {
-    if (selectedDate && !isBulkBooking) {
-      // Set start time to the selected date with current time
-      const newStartTime = new Date(selectedDate)
-      setStartTime(newStartTime)
-
-      // Set end time to 1 hour later
-      const newEndTime = new Date(selectedDate)
-      newEndTime.setHours(newStartTime.getHours() + 1, newStartTime.getMinutes(), 0, 0)
+    if (startTime && !isBulkBooking) {
+      const newEndTime = new Date(startTime)
+      newEndTime.setHours(startTime.getHours() + 1, startTime.getMinutes(), 0, 0)
       setEndTime(newEndTime)
     }
-  }, [selectedDate, isBulkBooking])
+  }, [startTime, isBulkBooking])
+
+  // Update bulk end time when bulk start time changes
+  useEffect(() => {
+    if (bulkStartTime && isBulkBooking) {
+      const newEndTime = new Date(bulkStartTime)
+      newEndTime.setHours(bulkStartTime.getHours() + 1, bulkStartTime.getMinutes(), 0, 0)
+      setBulkEndTime(newEndTime)
+    }
+  }, [bulkStartTime, isBulkBooking])
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, fileType: "ecaa" | "training") => {
     const file = event.target.files?.[0]
@@ -120,8 +132,11 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   }
 
   const getDuration = () => {
-    if (!startTime || !endTime) return ""
-    const diffMs = endTime.getTime() - startTime.getTime()
+    const start = isBulkBooking ? bulkStartTime : startTime
+    const end = isBulkBooking ? bulkEndTime : endTime
+
+    if (!start || !end) return ""
+    const diffMs = end.getTime() - start.getTime()
     const diffHours = diffMs / (1000 * 60 * 60)
     const hours = Math.floor(diffHours)
     const minutes = Math.round((diffHours - hours) * 60)
@@ -129,28 +144,16 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   }
 
   const getMinEndTime = () => {
-    if (!startTime) return undefined
-    const minEnd = new Date(startTime)
+    const start = isBulkBooking ? bulkStartTime : startTime
+    if (!start) return undefined
+    const minEnd = new Date(start)
     minEnd.setMinutes(minEnd.getMinutes() + 30) // Minimum 30 minutes
     return minEnd.toTimeString().slice(0, 5)
   }
 
-  const getMinStartTime = () => {
-    if (!selectedDate) return undefined
-
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const dateToCheck = new Date(selectedDate)
-    dateToCheck.setHours(0, 0, 0, 0)
-
-    // If it's today, return current time + 30 minutes
-    if (dateToCheck.getTime() === today.getTime()) {
-      const now = new Date()
-      const nextSlot = new Date(now.getTime() + 30 * 60 * 1000) // Add 30 minutes
-      return nextSlot.toTimeString().slice(0, 5)
-    }
-
-    return undefined
+  const removeBulkDate = (dateToRemove: string) => {
+    const newDates = selectedDates.filter((date) => date !== dateToRemove)
+    setSelectedDates(newDates)
   }
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -166,6 +169,13 @@ export function BookingForm({ classrooms }: BookingFormProps) {
         selectedDates.forEach((date) => {
           formData.append("selectedDates", date)
         })
+        // Add bulk booking times
+        if (bulkStartTime) formData.set("startTime", bulkStartTime.toISOString())
+        if (bulkEndTime) formData.set("endTime", bulkEndTime.toISOString())
+      } else {
+        // Add single booking times
+        if (startTime) formData.set("startTime", startTime.toISOString())
+        if (endTime) formData.set("endTime", endTime.toISOString())
       }
 
       const result = await createBooking(formData)
@@ -183,6 +193,8 @@ export function BookingForm({ classrooms }: BookingFormProps) {
         setSelectedDate(null)
         setStartTime(null)
         setEndTime(null)
+        setBulkStartTime(null)
+        setBulkEndTime(null)
         setEcaaInstructorApproval("")
         setIsBulkBooking(false)
         setSelectedDates([])
@@ -275,59 +287,92 @@ export function BookingForm({ classrooms }: BookingFormProps) {
             </Select>
           </div>
 
-          {/* Date and Time Selection */}
+          {/* Date and Time Selection - Single Booking */}
           {!isBulkBooking && (
             <div className="space-y-4">
-              {/* Single Date Selection */}
-              <SimpleDateTimePicker
-                label="Select Date"
-                icon={<Calendar className="h-4 w-4" />}
-                value={selectedDate}
-                onChange={setSelectedDate}
-                required
-              />
-
-              {/* Time Selection */}
-              {selectedDate && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <SimpleDateTimePicker
-                    label="Start Time"
-                    icon={<Clock className="h-4 w-4" />}
-                    value={startTime}
-                    onChange={setStartTime}
-                    name="startTime"
-                    minTime={getMinStartTime()}
-                    required
-                  />
-                  <SimpleDateTimePicker
-                    label="End Time"
-                    icon={<Clock className="h-4 w-4" />}
-                    value={endTime}
-                    onChange={setEndTime}
-                    name="endTime"
-                    minTime={getMinEndTime()}
-                    required
-                  />
-                </div>
-              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <SimpleDateTimePicker
+                  label="Start Date & Time"
+                  icon={<Calendar className="h-4 w-4" />}
+                  value={startTime}
+                  onChange={setStartTime}
+                  name="startTime"
+                  required
+                />
+                <SimpleDateTimePicker
+                  label="End Date & Time"
+                  icon={<Clock className="h-4 w-4" />}
+                  value={endTime}
+                  onChange={setEndTime}
+                  name="endTime"
+                  minTime={getMinEndTime()}
+                  required
+                />
+              </div>
             </div>
           )}
 
-          {/* Bulk Booking Date Selection */}
+          {/* Date and Time Selection - Bulk Booking */}
           {isBulkBooking && (
             <div className="space-y-4">
-              <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-                <p className="text-sm text-yellow-800 mb-2">
-                  <strong>Bulk Booking:</strong> Select multiple dates for the same time slot.
-                </p>
-                <p className="text-xs text-yellow-700">You can select dates in the past for bulk bookings.</p>
+              {/* Bulk Date Selection */}
+              <BulkDatePicker selectedDates={selectedDates} onSelectedDatesChange={setSelectedDates} />
+
+              {/* Selected Dates Display */}
+              {selectedDates.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-gray-600">Selected Dates:</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedDates.map((dateStr) => (
+                      <div
+                        key={dateStr}
+                        className="flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-1 rounded-md text-sm"
+                      >
+                        <span>
+                          {new Date(dateStr).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeBulkDate(dateStr)}
+                          className="ml-1 hover:bg-blue-200 rounded-full p-0.5"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Bulk Time Selection */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <SimpleDateTimePicker
+                  label="Start Time"
+                  icon={<Clock className="h-4 w-4" />}
+                  value={bulkStartTime}
+                  onChange={setBulkStartTime}
+                  timeOnly={true}
+                  required
+                />
+                <SimpleDateTimePicker
+                  label="End Time"
+                  icon={<Clock className="h-4 w-4" />}
+                  value={bulkEndTime}
+                  onChange={setBulkEndTime}
+                  timeOnly={true}
+                  minTime={getMinEndTime()}
+                  required
+                />
               </div>
-              {/* Add bulk date selection component here if needed */}
             </div>
           )}
 
           {/* Duration Display */}
-          {startTime && endTime && (
+          {((startTime && endTime && !isBulkBooking) || (bulkStartTime && bulkEndTime && isBulkBooking)) && (
             <div className="bg-green-50 p-3 rounded-lg border border-green-200">
               <p className="text-sm text-green-800">
                 <strong>Duration:</strong> {getDuration()}
@@ -514,8 +559,8 @@ export function BookingForm({ classrooms }: BookingFormProps) {
             disabled={
               isSubmitting ||
               Object.values(fileErrors).some(Boolean) ||
-              (isBulkBooking && selectedDates.length === 0) ||
-              (!isBulkBooking && (!selectedDate || !startTime || !endTime))
+              (isBulkBooking && (selectedDates.length === 0 || !bulkStartTime || !bulkEndTime)) ||
+              (!isBulkBooking && (!startTime || !endTime))
             }
             className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3 px-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
           >
