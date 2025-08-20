@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { ModernDateTimePicker } from "./modern-date-time-picker"
+import { SimpleDateTimePicker } from "./simple-date-time-picker"
 import { Calendar, Clock, Users, FileText, Upload, AlertCircle, CalendarDays, Building2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
@@ -46,6 +46,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedClassroom, setSelectedClassroom] = useState<string>("")
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [startTime, setStartTime] = useState<Date | null>(null)
   const [endTime, setEndTime] = useState<Date | null>(null)
   const [ecaaInstructorApproval, setEcaaInstructorApproval] = useState<string>("")
@@ -66,9 +67,24 @@ export function BookingForm({ classrooms }: BookingFormProps) {
     } else {
       setStartTime(null)
       setEndTime(null)
+      setSelectedDate(null)
     }
     setSelectedDates([])
   }, [isBulkBooking])
+
+  // Update start and end times when date changes
+  useEffect(() => {
+    if (selectedDate && !isBulkBooking) {
+      // Set start time to the selected date with current time
+      const newStartTime = new Date(selectedDate)
+      setStartTime(newStartTime)
+
+      // Set end time to 1 hour later
+      const newEndTime = new Date(selectedDate)
+      newEndTime.setHours(newStartTime.getHours() + 1, newStartTime.getMinutes(), 0, 0)
+      setEndTime(newEndTime)
+    }
+  }, [selectedDate, isBulkBooking])
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, fileType: "ecaa" | "training") => {
     const file = event.target.files?.[0]
@@ -112,6 +128,31 @@ export function BookingForm({ classrooms }: BookingFormProps) {
     return `${hours}h ${minutes}m`
   }
 
+  const getMinEndTime = () => {
+    if (!startTime) return undefined
+    const minEnd = new Date(startTime)
+    minEnd.setMinutes(minEnd.getMinutes() + 30) // Minimum 30 minutes
+    return minEnd.toTimeString().slice(0, 5)
+  }
+
+  const getMinStartTime = () => {
+    if (!selectedDate) return undefined
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const dateToCheck = new Date(selectedDate)
+    dateToCheck.setHours(0, 0, 0, 0)
+
+    // If it's today, return current time + 30 minutes
+    if (dateToCheck.getTime() === today.getTime()) {
+      const now = new Date()
+      const nextSlot = new Date(now.getTime() + 30 * 60 * 1000) // Add 30 minutes
+      return nextSlot.toTimeString().slice(0, 5)
+    }
+
+    return undefined
+  }
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setIsSubmitting(true)
@@ -139,6 +180,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
         const form = event.currentTarget
         form.reset()
         setSelectedClassroom("")
+        setSelectedDate(null)
         setStartTime(null)
         setEndTime(null)
         setEcaaInstructorApproval("")
@@ -234,56 +276,53 @@ export function BookingForm({ classrooms }: BookingFormProps) {
           </div>
 
           {/* Date and Time Selection */}
-          {isBulkBooking ? (
+          {!isBulkBooking && (
             <div className="space-y-4">
-              <ModernDateTimePicker
-                label="Select Multiple Dates"
-                icon={<CalendarDays className="h-4 w-4" />}
-                isBulkBooking={true}
-                selectedDates={selectedDates}
-                onSelectedDatesChange={setSelectedDates}
+              {/* Single Date Selection */}
+              <SimpleDateTimePicker
+                label="Select Date"
+                icon={<Calendar className="h-4 w-4" />}
+                value={selectedDate}
+                onChange={setSelectedDate}
                 required
               />
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <ModernDateTimePicker
-                  label="Start Time"
-                  icon={<Clock className="h-4 w-4" />}
-                  value={startTime}
-                  onChange={setStartTime}
-                  name="startTime"
-                  timeOnly={true}
-                  required
-                />
-                <ModernDateTimePicker
-                  label="End Time"
-                  icon={<Clock className="h-4 w-4" />}
-                  value={endTime}
-                  onChange={setEndTime}
-                  name="endTime"
-                  timeOnly={true}
-                  required
-                />
-              </div>
+              {/* Time Selection */}
+              {selectedDate && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <SimpleDateTimePicker
+                    label="Start Time"
+                    icon={<Clock className="h-4 w-4" />}
+                    value={startTime}
+                    onChange={setStartTime}
+                    name="startTime"
+                    minTime={getMinStartTime()}
+                    required
+                  />
+                  <SimpleDateTimePicker
+                    label="End Time"
+                    icon={<Clock className="h-4 w-4" />}
+                    value={endTime}
+                    onChange={setEndTime}
+                    name="endTime"
+                    minTime={getMinEndTime()}
+                    required
+                  />
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <ModernDateTimePicker
-                label="Start Date & Time"
-                icon={<Calendar className="h-4 w-4" />}
-                value={startTime}
-                onChange={setStartTime}
-                name="startTime"
-                required
-              />
-              <ModernDateTimePicker
-                label="End Date & Time"
-                icon={<Clock className="h-4 w-4" />}
-                value={endTime}
-                onChange={setEndTime}
-                name="endTime"
-                required
-              />
+          )}
+
+          {/* Bulk Booking Date Selection */}
+          {isBulkBooking && (
+            <div className="space-y-4">
+              <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                <p className="text-sm text-yellow-800 mb-2">
+                  <strong>Bulk Booking:</strong> Select multiple dates for the same time slot.
+                </p>
+                <p className="text-xs text-yellow-700">You can select dates in the past for bulk bookings.</p>
+              </div>
+              {/* Add bulk date selection component here if needed */}
             </div>
           )}
 
@@ -473,7 +512,10 @@ export function BookingForm({ classrooms }: BookingFormProps) {
           <Button
             type="submit"
             disabled={
-              isSubmitting || Object.values(fileErrors).some(Boolean) || (isBulkBooking && selectedDates.length === 0)
+              isSubmitting ||
+              Object.values(fileErrors).some(Boolean) ||
+              (isBulkBooking && selectedDates.length === 0) ||
+              (!isBulkBooking && (!selectedDate || !startTime || !endTime))
             }
             className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3 px-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
           >
