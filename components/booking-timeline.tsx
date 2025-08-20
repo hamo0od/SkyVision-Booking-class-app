@@ -176,9 +176,9 @@ export function BookingTimeline() {
               </div>
               <div
                 className="grid gap-2"
-                style={{ gridTemplateColumns: `repeat(${timelineData.classrooms.length}, minmax(120px, 1fr))` }}
+                style={{ gridTemplateColumns: `repeat(${timelineData?.classrooms?.length || 0}, minmax(120px, 1fr))` }}
               >
-                {timelineData.classrooms.map((classroom) => (
+                {(timelineData?.classrooms || []).map((classroom) => (
                   <div key={classroom.id} className="text-center p-2 bg-blue-50 rounded-lg border border-blue-200">
                     <div className="font-medium text-xs sm:text-sm text-blue-800 flex items-center justify-center gap-1">
                       <MapPin className="h-3 w-3" />
@@ -203,9 +203,11 @@ export function BookingTimeline() {
                     </div>
                     <div
                       className="grid gap-2"
-                      style={{ gridTemplateColumns: `repeat(${timelineData.classrooms.length}, minmax(120px, 1fr))` }}
+                      style={{
+                        gridTemplateColumns: `repeat(${timelineData?.classrooms?.length || 0}, minmax(120px, 1fr))`,
+                      }}
                     >
-                      {timelineData.classrooms.map((classroom) => {
+                      {(timelineData?.classrooms || []).map((classroom) => {
                         const booking = getBookingForSlot(classroom.id, timeSlot)
 
                         if (booking) {
@@ -282,7 +284,7 @@ export function BookingTimeline() {
           </div>
         </div>
 
-        {timelineData.bookings.length === 0 && (
+        {timelineData?.bookings?.length === 0 && timelineData?.classrooms?.length === 0 && (
           <div className="text-center py-6 sm:py-8 text-gray-500">
             <Calendar className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-4 text-gray-300" />
             <p className="text-sm sm:text-base">No bookings for this date</p>

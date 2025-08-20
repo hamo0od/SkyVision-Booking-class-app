@@ -46,7 +46,6 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedClassroom, setSelectedClassroom] = useState<string>("")
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [startTime, setStartTime] = useState<Date | null>(null)
   const [endTime, setEndTime] = useState<Date | null>(null)
   const [ecaaInstructorApproval, setEcaaInstructorApproval] = useState<string>("")
@@ -64,22 +63,12 @@ export function BookingForm({ classrooms }: BookingFormProps) {
       defaultEnd.setHours(8, 0, 0, 0)
       setStartTime(defaultStart)
       setEndTime(defaultEnd)
-      setSelectedDate(null)
     } else {
       setStartTime(null)
       setEndTime(null)
-      setSelectedDate(null)
     }
     setSelectedDates([])
   }, [isBulkBooking])
-
-  // Reset times when date changes for single booking
-  useEffect(() => {
-    if (!isBulkBooking && selectedDate) {
-      setStartTime(null)
-      setEndTime(null)
-    }
-  }, [selectedDate, isBulkBooking])
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, fileType: "ecaa" | "training") => {
     const file = event.target.files?.[0]
@@ -138,18 +127,6 @@ export function BookingForm({ classrooms }: BookingFormProps) {
         })
       }
 
-      // Add date and time data for single bookings
-      if (!isBulkBooking && selectedDate && startTime && endTime) {
-        const bookingStartTime = new Date(selectedDate)
-        bookingStartTime.setHours(startTime.getHours(), startTime.getMinutes(), 0, 0)
-
-        const bookingEndTime = new Date(selectedDate)
-        bookingEndTime.setHours(endTime.getHours(), endTime.getMinutes(), 0, 0)
-
-        formData.set("startTime", bookingStartTime.toISOString())
-        formData.set("endTime", bookingEndTime.toISOString())
-      }
-
       const result = await createBooking(formData)
 
       if (result.success) {
@@ -162,7 +139,6 @@ export function BookingForm({ classrooms }: BookingFormProps) {
         const form = event.currentTarget
         form.reset()
         setSelectedClassroom("")
-        setSelectedDate(null)
         setStartTime(null)
         setEndTime(null)
         setEcaaInstructorApproval("")
@@ -291,41 +267,23 @@ export function BookingForm({ classrooms }: BookingFormProps) {
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
-              {/* Single Date Selection */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <ModernDateTimePicker
-                label="Select Date"
+                label="Start Date & Time"
                 icon={<Calendar className="h-4 w-4" />}
-                selectedDate={selectedDate}
-                onDateChange={setSelectedDate}
-                name="selectedDate"
+                value={startTime}
+                onChange={setStartTime}
+                name="startTime"
                 required
               />
-
-              {/* Time Selection */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <ModernDateTimePicker
-                  label="Start Time"
-                  icon={<Clock className="h-4 w-4" />}
-                  value={startTime}
-                  onChange={setStartTime}
-                  name="startTime"
-                  isStartTime={true}
-                  selectedDate={selectedDate}
-                  required
-                />
-                <ModernDateTimePicker
-                  label="End Time"
-                  icon={<Clock className="h-4 w-4" />}
-                  value={endTime}
-                  onChange={setEndTime}
-                  name="endTime"
-                  isEndTime={true}
-                  startTime={startTime}
-                  selectedDate={selectedDate}
-                  required
-                />
-              </div>
+              <ModernDateTimePicker
+                label="End Date & Time"
+                icon={<Clock className="h-4 w-4" />}
+                value={endTime}
+                onChange={setEndTime}
+                name="endTime"
+                required
+              />
             </div>
           )}
 
@@ -515,10 +473,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
           <Button
             type="submit"
             disabled={
-              isSubmitting ||
-              Object.values(fileErrors).some(Boolean) ||
-              (isBulkBooking && selectedDates.length === 0) ||
-              (!isBulkBooking && (!selectedDate || !startTime || !endTime))
+              isSubmitting || Object.values(fileErrors).some(Boolean) || (isBulkBooking && selectedDates.length === 0)
             }
             className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3 px-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
           >
