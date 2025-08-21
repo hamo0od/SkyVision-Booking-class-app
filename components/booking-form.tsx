@@ -47,7 +47,6 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedClassroom, setSelectedClassroom] = useState<string>("")
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [startTime, setStartTime] = useState<Date | null>(null)
   const [endTime, setEndTime] = useState<Date | null>(null)
   const [ecaaInstructorApproval, setEcaaInstructorApproval] = useState<string>("")
@@ -61,7 +60,6 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   useEffect(() => {
     if (isBulkBooking) {
       // Reset single booking fields
-      setSelectedDate(null)
       setStartTime(null)
       setEndTime(null)
 
@@ -151,6 +149,26 @@ export function BookingForm({ classrooms }: BookingFormProps) {
     return minEnd.toTimeString().slice(0, 5)
   }
 
+  const getMinStartTime = () => {
+    if (isBulkBooking) return undefined // No restriction for bulk booking times
+
+    if (!startTime) return undefined
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const dateToCheck = new Date(startTime)
+    dateToCheck.setHours(0, 0, 0, 0)
+
+    // If it's today, return current time + 30 minutes
+    if (dateToCheck.getTime() === today.getTime()) {
+      const now = new Date()
+      const nextSlot = new Date(now.getTime() + 30 * 60 * 1000) // Add 30 minutes
+      return nextSlot.toTimeString().slice(0, 5)
+    }
+
+    return undefined
+  }
+
   const removeBulkDate = (dateToRemove: string) => {
     const newDates = selectedDates.filter((date) => date !== dateToRemove)
     setSelectedDates(newDates)
@@ -190,7 +208,6 @@ export function BookingForm({ classrooms }: BookingFormProps) {
         const form = event.currentTarget
         form.reset()
         setSelectedClassroom("")
-        setSelectedDate(null)
         setStartTime(null)
         setEndTime(null)
         setBulkStartTime(null)
@@ -298,6 +315,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
                   onChange={setStartTime}
                   name="startTime"
                   required
+                  minTime={getMinStartTime()}
                 />
                 <SimpleDateTimePicker
                   label="End Date & Time"

@@ -120,6 +120,11 @@ export function SimpleDateTimePicker({
       const newDate = new Date(value)
       newDate.setHours(hours, minutes, 0, 0)
       onChange?.(newDate)
+    } else {
+      // No date selected yet, create a new date with today's date and selected time
+      const newDate = new Date()
+      newDate.setHours(hours, minutes, 0, 0)
+      onChange?.(newDate)
     }
   }
 
@@ -135,19 +140,10 @@ export function SimpleDateTimePicker({
   const getAvailableTimeOptions = () => {
     const timeOptions = generateTimeOptions()
 
-    if (!value || !minTime) return timeOptions
+    if (!minTime) return timeOptions
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const selectedDate = new Date(value)
-    selectedDate.setHours(0, 0, 0, 0)
-
-    // If it's today, filter out past times
-    if (selectedDate.getTime() === today.getTime()) {
-      return timeOptions.filter((option) => option.value >= minTime)
-    }
-
-    return timeOptions
+    // If we have a minimum time restriction, filter options
+    return timeOptions.filter((option) => option.value >= minTime)
   }
 
   const timeOptions = getAvailableTimeOptions()
@@ -184,6 +180,7 @@ export function SimpleDateTimePicker({
     )
   }
 
+  // Regular mode - separate date picker and time selector (like bulk booking)
   return (
     <div className="space-y-2">
       {label && (
@@ -239,7 +236,7 @@ export function SimpleDateTimePicker({
 
         {/* Time Selector */}
         <div className="flex-1">
-          <Select value={currentTimeValue} onValueChange={handleTimeChange} disabled={!value}>
+          <Select value={currentTimeValue} onValueChange={handleTimeChange}>
             <SelectTrigger className="bg-white">
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-gray-400" />
