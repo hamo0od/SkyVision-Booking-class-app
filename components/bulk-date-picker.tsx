@@ -3,9 +3,10 @@
 import { useState } from "react"
 import { Calendar } from "@/components/ui/calendar"
 import { Button } from "@/components/ui/button"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Label } from "@/components/ui/label"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { CalendarIcon } from "lucide-react"
+import { format } from "date-fns"
 
 interface BulkDatePickerProps {
   selectedDates: string[]
@@ -13,67 +14,67 @@ interface BulkDatePickerProps {
 }
 
 export function BulkDatePicker({ selectedDates, onSelectedDatesChange }: BulkDatePickerProps) {
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(false)
 
-  const handleDateSelect = (date: Date | undefined) => {
-    if (!date) return
+  // Convert string dates to Date objects for calendar
+  const selectedCalendarDates = selectedDates.map((dateStr) => new Date(dateStr))
 
-    const dateString = date.toISOString().split("T")[0] // YYYY-MM-DD format
-
-    if (selectedDates.includes(dateString)) {
-      // Remove date if already selected
-      onSelectedDatesChange(selectedDates.filter((d) => d !== dateString))
+  const handleDateSelect = (dates: Date[] | undefined) => {
+    if (dates) {
+      const dateStrings = dates.map((date) => format(date, "yyyy-MM-dd")).sort()
+      onSelectedDatesChange(dateStrings)
     } else {
-      // Add date if not selected
-      onSelectedDatesChange([...selectedDates, dateString].sort())
+      onSelectedDatesChange([])
     }
-  }
-
-  const isDateDisabled = (date: Date) => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    return date < today
-  }
-
-  const isDateSelected = (date: Date) => {
-    const dateString = date.toISOString().split("T")[0]
-    return selectedDates.includes(dateString)
   }
 
   return (
     <div className="space-y-2">
       <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
         <CalendarIcon className="h-4 w-4" />
-        Select Dates *
+        Select Multiple Dates *
       </Label>
-      <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+
+      <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
-          <Button variant="outline" className="w-full justify-start text-left font-normal bg-white" type="button">
+          <Button variant="outline" className="w-full justify-start text-left font-normal bg-white">
             <CalendarIcon className="mr-2 h-4 w-4" />
-            {selectedDates.length === 0
-              ? "Select dates"
-              : `${selectedDates.length} date${selectedDates.length === 1 ? "" : "s"} selected`}
+            {selectedDates.length > 0 ? `${selectedDates.length} dates selected` : "Select dates"}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
           <Calendar
-            mode="single"
-            selected={undefined}
+            mode="multiple"
+            selected={selectedCalendarDates}
             onSelect={handleDateSelect}
-            disabled={isDateDisabled}
+            disabled={(date) => {
+              const today = new Date()
+              today.setHours(0, 0, 0, 0)
+              return date < today
+            }}
             modifiers={{
-              selected: isDateSelected,
+              past: (date) => {
+                const today = new Date()
+                today.setHours(0, 0, 0, 0)
+                return date < today
+              },
             }}
             modifiersStyles={{
-              selected: {
-                backgroundColor: "#3b82f6",
-                color: "white",
+              past: {
+                color: "#dc2626",
+                backgroundColor: "#fef2f2",
               },
             }}
             initialFocus
           />
           <div className="p-3 border-t">
-            <p className="text-sm text-gray-600">Click dates to select/deselect. {selectedDates.length} selected.</p>
+            <div className="text-xs text-gray-500 mb-2 flex items-center gap-2">
+              <span className="inline-block w-3 h-3 bg-red-50 border border-red-200 rounded"></span>
+              Past dates (unavailable)
+            </div>
+            <Button onClick={() => setIsOpen(false)} className="w-full" size="sm">
+              Done
+            </Button>
           </div>
         </PopoverContent>
       </Popover>
