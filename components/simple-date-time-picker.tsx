@@ -19,6 +19,7 @@ interface SimpleDateTimePickerProps {
   required?: boolean
   minTime?: string
   timeOnly?: boolean
+  dateOnly?: boolean
 }
 
 export function SimpleDateTimePicker({
@@ -30,6 +31,7 @@ export function SimpleDateTimePicker({
   required = false,
   minTime,
   timeOnly = false,
+  dateOnly = false,
 }: SimpleDateTimePickerProps) {
   const [isOpen, setIsOpen] = useState(false)
 
@@ -55,77 +57,15 @@ export function SimpleDateTimePicker({
 
   const handleDateSelect = (date: Date | undefined) => {
     if (!date) return
-
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const selectedDate = new Date(date)
-    selectedDate.setHours(0, 0, 0, 0)
-
-    if (value) {
-      // Preserve time if it exists, but adjust if selecting today
-      const newDate = new Date(date)
-      if (selectedDate.getTime() === today.getTime()) {
-        // If selecting today, ensure time is not in the past
-        const now = new Date()
-        const currentHour = now.getHours()
-        const currentMinute = now.getMinutes()
-
-        // Set to next 30-minute interval
-        let nextHour = currentHour
-        const nextMinute = currentMinute <= 30 ? 30 : 0
-        if (nextMinute === 0) {
-          nextHour += 1
-        }
-
-        newDate.setHours(nextHour, nextMinute, 0, 0)
-      } else {
-        // For future dates, preserve the existing time or set default
-        newDate.setHours(value.getHours(), value.getMinutes(), value.getSeconds())
-      }
-      onChange?.(newDate)
-    } else {
-      // No existing time, set appropriate default
-      if (selectedDate.getTime() === today.getTime()) {
-        // If selecting today, set to next available 30-minute slot
-        const now = new Date()
-        const currentHour = now.getHours()
-        const currentMinute = now.getMinutes()
-
-        let nextHour = currentHour
-        const nextMinute = currentMinute <= 30 ? 30 : 0
-        if (nextMinute === 0) {
-          nextHour += 1
-        }
-
-        date.setHours(nextHour, nextMinute, 0, 0)
-      } else {
-        // For future dates, set to 9:00 AM
-        date.setHours(9, 0, 0, 0)
-      }
-      onChange?.(date)
-    }
+    onChange?.(date)
     setIsOpen(false)
   }
 
   const handleTimeChange = (timeString: string) => {
     const [hours, minutes] = timeString.split(":").map(Number)
-
-    if (timeOnly) {
-      // For time-only mode, create a date with today's date but the specified time
-      const newDate = new Date()
-      newDate.setHours(hours, minutes, 0, 0)
-      onChange?.(newDate)
-    } else if (value) {
-      // For datetime mode, update the time part of the existing date
-      const newDate = new Date(value)
-      newDate.setHours(hours, minutes, 0, 0)
-      onChange?.(newDate)
-    } else {
-      // No date selected yet, create a new date with today's date and selected time
-      const newDate = new Date()
-      newDate.setHours(hours, minutes, 0, 0)
-      onChange?.(newDate)
-    }
+    const newDate = new Date()
+    newDate.setHours(hours, minutes, 0, 0)
+    onChange?.(newDate)
   }
 
   const formatTime = (date: Date) => {
@@ -136,18 +76,74 @@ export function SimpleDateTimePicker({
     return format(date, "PPP") // e.g., "Jan 1, 2024"
   }
 
-  // Filter time options based on minimum time if it's today
+  // Filter time options based on minimum time
   const getAvailableTimeOptions = () => {
     const timeOptions = generateTimeOptions()
 
     if (!minTime) return timeOptions
 
-    // If we have a minimum time restriction, filter options
+    // Filter out times before minimum time
     return timeOptions.filter((option) => option.value >= minTime)
   }
 
   const timeOptions = getAvailableTimeOptions()
   const currentTimeValue = value ? formatTime(value) : ""
+
+  // For date-only mode, just show date picker
+  if (dateOnly) {
+    return (
+      <div className="space-y-2">
+        {label && (
+          <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+            {icon}
+            {label}
+            {required && <span className="text-red-500">*</span>}
+          </Label>
+        )}
+        <Popover open={isOpen} onOpenChange={setIsOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="w-full justify-start text-left font-normal bg-white">
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {value ? formatDisplayDate(value) : "Pick a date"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={value || undefined}
+              onSelect={handleDateSelect}
+              disabled={(date) => {
+                const today = new Date()
+                today.setHours(0, 0, 0, 0)
+                return date < today
+              }}
+              modifiers={{
+                past: (date) => {
+                  const today = new Date()
+                  today.setHours(0, 0, 0, 0)
+                  return date < today
+                },
+              }}
+              modifiersStyles={{
+                past: {
+                  color: "#dc2626",
+                  backgroundColor: "#fef2f2",
+                },
+              }}
+              initialFocus
+            />
+            <div className="p-3 border-t">
+              <div className="text-xs text-gray-500 flex items-center gap-2">
+                <span className="inline-block w-3 h-3 bg-red-50 border border-red-200 rounded"></span>
+                Past dates (unavailable)
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+        {name && <input type="hidden" name={name} value={value?.toISOString() || ""} />}
+      </div>
+    )
+  }
 
   // For time-only mode, just show time selector
   if (timeOnly) {
