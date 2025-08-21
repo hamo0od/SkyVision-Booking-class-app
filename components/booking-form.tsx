@@ -43,17 +43,33 @@ const DEPARTMENTS = [
   "Meetings",
 ]
 
+// Duration options in minutes
+const DURATION_OPTIONS = [
+  { value: 30, label: "30 minutes" },
+  { value: 60, label: "1 hour" },
+  { value: 90, label: "1.5 hours" },
+  { value: 120, label: "2 hours" },
+  { value: 150, label: "2.5 hours" },
+  { value: 180, label: "3 hours" },
+  { value: 210, label: "3.5 hours" },
+  { value: 240, label: "4 hours" },
+  { value: 300, label: "5 hours" },
+  { value: 360, label: "6 hours" },
+  { value: 420, label: "7 hours" },
+  { value: 480, label: "8 hours" },
+]
+
 export function BookingForm({ classrooms }: BookingFormProps) {
   const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedClassroom, setSelectedClassroom] = useState<string>("")
   const [startTime, setStartTime] = useState<Date | null>(null)
-  const [endTime, setEndTime] = useState<Date | null>(null)
+  const [duration, setDuration] = useState<number>(60) // Default 1 hour
   const [ecaaInstructorApproval, setEcaaInstructorApproval] = useState<string>("")
   const [isBulkBooking, setIsBulkBooking] = useState(false)
   const [selectedDates, setSelectedDates] = useState<string[]>([])
   const [bulkStartTime, setBulkStartTime] = useState<Date | null>(null)
-  const [bulkEndTime, setBulkEndTime] = useState<Date | null>(null)
+  const [bulkDuration, setBulkDuration] = useState<number>(60) // Default 1 hour
   const [fileErrors, setFileErrors] = useState<{ ecaa?: string; training?: string }>({})
 
   // Reset time fields when bulk booking mode changes
@@ -61,40 +77,20 @@ export function BookingForm({ classrooms }: BookingFormProps) {
     if (isBulkBooking) {
       // Reset single booking fields
       setStartTime(null)
-      setEndTime(null)
+      setDuration(60)
 
-      // Set default time for bulk booking (9 AM - 10 AM)
+      // Set default time for bulk booking (9 AM)
       const defaultStart = new Date()
       defaultStart.setHours(9, 0, 0, 0)
-      const defaultEnd = new Date()
-      defaultEnd.setHours(10, 0, 0, 0)
       setBulkStartTime(defaultStart)
-      setBulkEndTime(defaultEnd)
+      setBulkDuration(60)
     } else {
       // Reset bulk booking fields
       setSelectedDates([])
       setBulkStartTime(null)
-      setBulkEndTime(null)
+      setBulkDuration(60)
     }
   }, [isBulkBooking])
-
-  // Update end time when start time changes (for single booking)
-  useEffect(() => {
-    if (startTime && !isBulkBooking) {
-      const newEndTime = new Date(startTime)
-      newEndTime.setHours(startTime.getHours() + 1, startTime.getMinutes(), 0, 0)
-      setEndTime(newEndTime)
-    }
-  }, [startTime, isBulkBooking])
-
-  // Update bulk end time when bulk start time changes
-  useEffect(() => {
-    if (bulkStartTime && isBulkBooking) {
-      const newEndTime = new Date(bulkStartTime)
-      newEndTime.setHours(bulkStartTime.getHours() + 1, bulkStartTime.getMinutes(), 0, 0)
-      setBulkEndTime(newEndTime)
-    }
-  }, [bulkStartTime, isBulkBooking])
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, fileType: "ecaa" | "training") => {
     const file = event.target.files?.[0]
@@ -129,24 +125,19 @@ export function BookingForm({ classrooms }: BookingFormProps) {
     }
   }
 
-  const getDuration = () => {
-    const start = isBulkBooking ? bulkStartTime : startTime
-    const end = isBulkBooking ? bulkEndTime : endTime
-
-    if (!start || !end) return ""
-    const diffMs = end.getTime() - start.getTime()
-    const diffHours = diffMs / (1000 * 60 * 60)
-    const hours = Math.floor(diffHours)
-    const minutes = Math.round((diffHours - hours) * 60)
-    return `${hours}h ${minutes}m`
+  const calculateEndTime = (start: Date | null, durationMinutes: number): Date | null => {
+    if (!start) return null
+    const end = new Date(start)
+    end.setMinutes(end.getMinutes() + durationMinutes)
+    return end
   }
 
-  const getMinEndTime = () => {
-    const start = isBulkBooking ? bulkStartTime : startTime
-    if (!start) return undefined
-    const minEnd = new Date(start)
-    minEnd.setMinutes(minEnd.getMinutes() + 30) // Minimum 30 minutes
-    return minEnd.toTimeString().slice(0, 5)
+  const getDurationDisplay = (durationMinutes: number) => {
+    const hours = Math.floor(durationMinutes / 60)
+    const minutes = durationMinutes % 60
+    if (hours === 0) return `${minutes}m`
+    if (minutes === 0) return `${hours}h`
+    return `${hours}h ${minutes}m`
   }
 
   const getMinStartTime = () => {
@@ -183,17 +174,24 @@ export function BookingForm({ classrooms }: BookingFormProps) {
 
       // Add bulk booking data
       formData.set("isBulkBooking", isBulkBooking.toString())
+
       if (isBulkBooking) {
         selectedDates.forEach((date) => {
           formData.append("selectedDates", date)
         })
         // Add bulk booking times
-        if (bulkStartTime) formData.set("startTime", bulkStartTime.toISOString())
-        if (bulkEndTime) formData.set("endTime", bulkEndTime.toISOString())
+        if (bulkStartTime) {
+          formData.set("startTime", bulkStartTime.toISOString())
+          const endTime = calculateEndTime(bulkStartTime, bulkDuration)
+          if (endTime) formData.set("endTime", endTime.toISOString())
+        }
       } else {
         // Add single booking times
-        if (startTime) formData.set("startTime", startTime.toISOString())
-        if (endTime) formData.set("endTime", endTime.toISOString())
+        if (startTime) {
+          formData.set("startTime", startTime.toISOString())
+          const endTime = calculateEndTime(startTime, duration)
+          if (endTime) formData.set("endTime", endTime.toISOString())
+        }
       }
 
       const result = await createBooking(formData)
@@ -209,9 +207,9 @@ export function BookingForm({ classrooms }: BookingFormProps) {
         form.reset()
         setSelectedClassroom("")
         setStartTime(null)
-        setEndTime(null)
+        setDuration(60)
         setBulkStartTime(null)
-        setBulkEndTime(null)
+        setBulkDuration(60)
         setEcaaInstructorApproval("")
         setIsBulkBooking(false)
         setSelectedDates([])
@@ -309,7 +307,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <SimpleDateTimePicker
-                  label="Start Date & Time"
+                  label="Date & Time"
                   icon={<Calendar className="h-4 w-4" />}
                   value={startTime}
                   onChange={setStartTime}
@@ -317,15 +315,24 @@ export function BookingForm({ classrooms }: BookingFormProps) {
                   required
                   minTime={getMinStartTime()}
                 />
-                <SimpleDateTimePicker
-                  label="End Date & Time"
-                  icon={<Clock className="h-4 w-4" />}
-                  value={endTime}
-                  onChange={setEndTime}
-                  name="endTime"
-                  minTime={getMinEndTime()}
-                  required
-                />
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    Duration *
+                  </Label>
+                  <Select value={duration.toString()} onValueChange={(value) => setDuration(Number.parseInt(value))}>
+                    <SelectTrigger className="bg-white">
+                      <SelectValue placeholder="Select duration" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DURATION_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value.toString()}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
           )}
@@ -366,7 +373,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
                 </div>
               )}
 
-              {/* Bulk Time Selection */}
+              {/* Bulk Time and Duration Selection */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <SimpleDateTimePicker
                   label="Start Time"
@@ -376,27 +383,55 @@ export function BookingForm({ classrooms }: BookingFormProps) {
                   timeOnly={true}
                   required
                 />
-                <SimpleDateTimePicker
-                  label="End Time"
-                  icon={<Clock className="h-4 w-4" />}
-                  value={bulkEndTime}
-                  onChange={setBulkEndTime}
-                  timeOnly={true}
-                  minTime={getMinEndTime()}
-                  required
-                />
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    Duration *
+                  </Label>
+                  <Select
+                    value={bulkDuration.toString()}
+                    onValueChange={(value) => setBulkDuration(Number.parseInt(value))}
+                  >
+                    <SelectTrigger className="bg-white">
+                      <SelectValue placeholder="Select duration" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DURATION_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value.toString()}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
           )}
 
           {/* Duration Display */}
-          {((startTime && endTime && !isBulkBooking) || (bulkStartTime && bulkEndTime && isBulkBooking)) && (
+          {((startTime && !isBulkBooking) || (bulkStartTime && isBulkBooking)) && (
             <div className="bg-green-50 p-3 rounded-lg border border-green-200">
               <p className="text-sm text-green-800">
-                <strong>Duration:</strong> {getDuration()}
+                <strong>Session Duration:</strong> {getDurationDisplay(isBulkBooking ? bulkDuration : duration)}
                 {isBulkBooking && selectedDates.length > 0 && (
                   <span className="ml-2">
                     • <strong>{selectedDates.length} dates selected</strong>
+                  </span>
+                )}
+                {((startTime && !isBulkBooking) || (bulkStartTime && isBulkBooking)) && (
+                  <span className="ml-2">
+                    • <strong>End Time:</strong>{" "}
+                    {isBulkBooking
+                      ? calculateEndTime(bulkStartTime, bulkDuration)?.toLocaleTimeString("en-US", {
+                          hour: "numeric",
+                          minute: "2-digit",
+                          hour12: true,
+                        })
+                      : calculateEndTime(startTime, duration)?.toLocaleTimeString("en-US", {
+                          hour: "numeric",
+                          minute: "2-digit",
+                          hour12: true,
+                        })}
                   </span>
                 )}
               </p>
@@ -577,8 +612,8 @@ export function BookingForm({ classrooms }: BookingFormProps) {
             disabled={
               isSubmitting ||
               Object.values(fileErrors).some(Boolean) ||
-              (isBulkBooking && (selectedDates.length === 0 || !bulkStartTime || !bulkEndTime)) ||
-              (!isBulkBooking && (!startTime || !endTime))
+              (isBulkBooking && (selectedDates.length === 0 || !bulkStartTime)) ||
+              (!isBulkBooking && !startTime)
             }
             className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3 px-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
           >
