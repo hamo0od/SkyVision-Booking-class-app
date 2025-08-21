@@ -1,105 +1,99 @@
-"use client"
-
-import { useState, useEffect } from "react"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/db"
+import { redirect } from "next/navigation"
 import { BookingForm } from "@/components/booking-form"
 import { BookingList } from "@/components/booking-list"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Calendar } from "lucide-react"
+import { BookingTimeline } from "@/components/booking-timeline"
+import { Button } from "@/components/ui/button"
+import { LogoutButton } from "@/components/logout-button"
+import Link from "next/link"
+import { MobileMenu } from "@/components/mobile-menu"
 
-async function getClassrooms() {
-  return await prisma.classroom.findMany({
-    orderBy: { name: "asc" },
+export default async function Dashboard() {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.user?.email) {
+    redirect("/auth/signin")
+  }
+
+  // Get the actual user from database
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
   })
-}
 
-async function getUserBookings(userId: string) {
-  return await prisma.booking.findMany({
-    where: { userId },
-    include: {
-      classroom: true,
-      user: true,
-    },
+  if (!user) {
+    redirect("/auth/signin")
+  }
+
+  const classrooms = await prisma.classroom.findMany()
+  const userBookings = await prisma.booking.findMany({
+    where: { userId: user.id }, // Use the actual user ID
+    include: { classroom: true },
     orderBy: { createdAt: "desc" },
   })
-}
-
-export default function DashboardPage() {
-  const [classrooms, setClassrooms] = useState([])
-  const [bookings, setBookings] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
-
-  const fetchData = async () => {
-    try {
-      setIsLoading(true)
-      // In a real app, you'd get the user ID from the session
-      // For now, we'll fetch all data
-      const [classroomsData, bookingsData] = await Promise.all([
-        fetch("/api/classrooms").then((res) => res.json()),
-        fetch("/api/bookings").then((res) => res.json()),
-      ])
-
-      setClassrooms(classroomsData)
-      setBookings(bookingsData)
-    } catch (error) {
-      console.error("Failed to fetch data:", error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchData()
-  }, [])
-
-  const handleBookingSuccess = () => {
-    // Refresh the bookings list when a new booking is created
-    fetchData()
-  }
-
-  if (isLoading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="h-96 bg-gray-200 rounded"></div>
-            <div className="h-96 bg-gray-200 rounded"></div>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
-        <p className="text-gray-600">Manage your classroom bookings</p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* Mobile-First Header */}
+      <header className="bg-white shadow-lg sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-4 lg:py-6">
+            {/* Logo/Title - Responsive */}
+            <h1 className="text-lg sm:text-xl lg:text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              <span className="hidden sm:inline">Classroom Booking System</span>
+              <span className="sm:hidden">Booking</span>
+            </h1>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Booking Form */}
-        <div>
-          <BookingForm classrooms={classrooms} onBookingSuccess={handleBookingSuccess} />
-        </div>
+            {/* Desktop Navigation */}
+            <div className="hidden lg:flex items-center space-x-4">
+              <span className="text-sm text-gray-700 bg-gray-100 px-3 py-1 rounded-full">
+                Welcome, {user.name || user.email}
+              </span>
+              {user.role === "ADMIN" && (
+                <Link href="/admin">
+                  <Button variant="outline" className="border-blue-200 text-blue-600 hover:bg-blue-50">
+                    Admin Panel
+                  </Button>
+                </Link>
+              )}
+              <Link href="/timeline">
+                <Button variant="outline" className="border-green-200 text-green-600 hover:bg-green-50">
+                  Full Timeline
+                </Button>
+              </Link>
+              <LogoutButton />
+            </div>
 
-        {/* My Bookings */}
-        <div>
-          <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50">
-            <CardHeader>
-              <CardTitle className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                <Calendar className="h-6 w-6 text-blue-600" />
-                My Bookings
-              </CardTitle>
-              <CardDescription>View and manage your classroom reservations</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <BookingList bookings={bookings} />
-            </CardContent>
-          </Card>
+            {/* Mobile Menu */}
+            <div className="lg:hidden">
+              <MobileMenu user={user} />
+            </div>
+          </div>
         </div>
-      </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto py-4 sm:py-6 lg:py-8 px-4 sm:px-6 lg:px-8">
+        <div className="space-y-6 lg:space-y-8">
+          {/* Booking Form and User Bookings - At the top */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 lg:gap-8">
+            <div className="w-full">
+              <h2 className="text-xl sm:text-2xl font-bold mb-4 lg:mb-6 text-gray-800">Book a Classroom</h2>
+              <BookingForm classrooms={classrooms} />
+            </div>
+            <div className="w-full">
+              <h2 className="text-xl sm:text-2xl font-bold mb-4 lg:mb-6 text-gray-800">Your Bookings</h2>
+              <BookingList bookings={userBookings} />
+            </div>
+          </div>
+
+          {/* Vertical Timeline Section - Below the booking sections */}
+          <div className="w-full">
+            <h2 className="text-xl sm:text-2xl font-bold mb-4 lg:mb-6 text-gray-800">Today's Schedule</h2>
+            <BookingTimeline />
+          </div>
+        </div>
+      </main>
     </div>
   )
 }
