@@ -1,20 +1,21 @@
 "use client"
 
 import type React from "react"
+
 import { useState } from "react"
 import { Calendar } from "@/components/ui/calendar"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { CalendarIcon, Clock } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
+import { CalendarIcon, ChevronDown } from "lucide-react"
 import { format } from "date-fns"
 
 interface SimpleDateTimePickerProps {
-  label?: string
+  label: string
   icon?: React.ReactNode
-  value?: Date | null
-  onChange?: (date: Date | null) => void
+  value: Date | null
+  onChange: (date: Date | null) => void
   name?: string
   required?: boolean
   minTime?: string
@@ -33,78 +34,110 @@ export function SimpleDateTimePicker({
   timeOnly = false,
   dateOnly = false,
 }: SimpleDateTimePickerProps) {
-  const [isOpen, setIsOpen] = useState(false)
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false)
 
-  // Generate 30-minute time intervals from 7:00 AM to 11:00 PM
+  // Generate time options in 30-minute intervals from 7 AM to 11 PM
   const generateTimeOptions = () => {
-    const options: { value: string; label: string }[] = []
-    const startHour = 7
-    const endHour = 23
-
-    for (let hour = startHour; hour <= endHour; hour++) {
-      const minutes = hour === endHour ? [0] : [0, 30]
-      for (const minute of minutes) {
-        const timeValue = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
-        const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour
-        const ampm = hour >= 12 ? "PM" : "AM"
-        const timeLabel = `${displayHour}:${minute.toString().padStart(2, "0")} ${ampm}`
-
-        options.push({ value: timeValue, label: timeLabel })
+    const options = []
+    for (let hour = 7; hour <= 23; hour++) {
+      for (let minute = 0; minute < 60; minute += 30) {
+        const time = new Date()
+        time.setHours(hour, minute, 0, 0)
+        const timeString = time.toTimeString().slice(0, 5)
+        const displayTime = time.toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        })
+        options.push({ value: timeString, label: displayTime })
       }
     }
     return options
   }
 
-  const handleDateSelect = (date: Date | undefined) => {
-    if (!date) return
-    onChange?.(date)
-    setIsOpen(false)
+  const timeOptions = generateTimeOptions()
+
+  const handleDateSelect = (selectedDate: Date | undefined) => {
+    if (selectedDate) {
+      if (dateOnly) {
+        onChange(selectedDate)
+      } else {
+        // If we have an existing time, preserve it
+        if (value) {
+          const newDate = new Date(selectedDate)
+          newDate.setHours(value.getHours(), value.getMinutes(), 0, 0)
+          onChange(newDate)
+        } else {
+          // Set default time to 9 AM
+          const newDate = new Date(selectedDate)
+          newDate.setHours(9, 0, 0, 0)
+          onChange(newDate)
+        }
+      }
+      setIsCalendarOpen(false)
+    }
   }
 
-  const handleTimeChange = (timeString: string) => {
+  const handleTimeSelect = (timeString: string) => {
     const [hours, minutes] = timeString.split(":").map(Number)
-    const newDate = new Date()
-    newDate.setHours(hours, minutes, 0, 0)
-    onChange?.(newDate)
+
+    if (timeOnly) {
+      // For time-only mode, create a new date with today's date
+      const newDate = new Date()
+      newDate.setHours(hours, minutes, 0, 0)
+      onChange(newDate)
+    } else {
+      // For date+time mode, preserve the existing date
+      const newDate = value ? new Date(value) : new Date()
+      newDate.setHours(hours, minutes, 0, 0)
+      onChange(newDate)
+    }
   }
 
-  const formatTime = (date: Date) => {
-    return date.toTimeString().slice(0, 5) // HH:MM format
+  const isTimeDisabled = (timeString: string) => {
+    if (!minTime) return false
+    return timeString < minTime
   }
 
-  const formatDisplayDate = (date: Date) => {
-    return format(date, "PPP") // e.g., "Jan 1, 2024"
+  const formatDisplayValue = () => {
+    if (!value) return ""
+
+    if (dateOnly) {
+      return format(value, "MMM dd, yyyy")
+    } else if (timeOnly) {
+      return value.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      })
+    } else {
+      return `${format(value, "MMM dd, yyyy")} at ${value.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      })}`
+    }
   }
 
-  // Filter time options based on minimum time
-  const getAvailableTimeOptions = () => {
-    const timeOptions = generateTimeOptions()
-
-    if (!minTime) return timeOptions
-
-    // Filter out times before minimum time
-    return timeOptions.filter((option) => option.value >= minTime)
+  const getPlaceholderText = () => {
+    if (dateOnly) return "Pick a date"
+    if (timeOnly) return "Select time"
+    return "Pick a date and time"
   }
 
-  const timeOptions = getAvailableTimeOptions()
-  const currentTimeValue = value ? formatTime(value) : ""
-
-  // For date-only mode, just show date picker
+  // For date-only mode
   if (dateOnly) {
     return (
       <div className="space-y-2">
-        {label && (
-          <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-            {icon}
-            {label}
-            {required && <span className="text-red-500">*</span>}
-          </Label>
-        )}
-        <Popover open={isOpen} onOpenChange={setIsOpen}>
+        <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+          {icon}
+          {label} {required && <span className="text-red-500">*</span>}
+        </Label>
+        <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
           <PopoverTrigger asChild>
-            <Button variant="outline" className="w-full justify-start text-left font-normal bg-white">
+            <Button variant="outline" className="w-full justify-start text-left font-normal bg-white" type="button">
               <CalendarIcon className="mr-2 h-4 w-4" />
-              {value ? formatDisplayDate(value) : "Pick a date"}
+              {value ? format(value, "MMM dd, yyyy") : getPlaceholderText()}
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="start">
@@ -112,88 +145,53 @@ export function SimpleDateTimePicker({
               mode="single"
               selected={value || undefined}
               onSelect={handleDateSelect}
-              disabled={(date) => {
-                const today = new Date()
-                today.setHours(0, 0, 0, 0)
-                return date < today
-              }}
-              modifiers={{
-                past: (date) => {
-                  const today = new Date()
-                  today.setHours(0, 0, 0, 0)
-                  return date < today
-                },
-              }}
-              modifiersStyles={{
-                past: {
-                  color: "#dc2626",
-                  backgroundColor: "#fef2f2",
-                },
-              }}
+              disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
               initialFocus
             />
-            <div className="p-3 border-t">
-              <div className="text-xs text-gray-500 flex items-center gap-2">
-                <span className="inline-block w-3 h-3 bg-red-50 border border-red-200 rounded"></span>
-                Past dates (unavailable)
-              </div>
-            </div>
           </PopoverContent>
         </Popover>
-        {name && <input type="hidden" name={name} value={value?.toISOString() || ""} />}
       </div>
     )
   }
 
-  // For time-only mode, just show time selector
+  // For time-only mode
   if (timeOnly) {
     return (
       <div className="space-y-2">
-        {label && (
-          <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-            {icon}
-            {label}
-            {required && <span className="text-red-500">*</span>}
-          </Label>
-        )}
-        <Select value={currentTimeValue} onValueChange={handleTimeChange}>
+        <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+          {icon}
+          {label} {required && <span className="text-red-500">*</span>}
+        </Label>
+        <Select value={value ? value.toTimeString().slice(0, 5) : ""} onValueChange={handleTimeSelect}>
           <SelectTrigger className="bg-white">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-gray-400" />
-              <SelectValue placeholder="--:-- --" />
-            </div>
+            <SelectValue placeholder={getPlaceholderText()} />
           </SelectTrigger>
           <SelectContent>
             {timeOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
+              <SelectItem key={option.value} value={option.value} disabled={isTimeDisabled(option.value)}>
                 {option.label}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        {name && <input type="hidden" name={name} value={value?.toISOString() || ""} />}
       </div>
     )
   }
 
-  // Regular mode - separate date picker and time selector (like bulk booking)
+  // For combined date+time mode
   return (
     <div className="space-y-2">
-      {label && (
-        <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-          {icon}
-          {label}
-          {required && <span className="text-red-500">*</span>}
-        </Label>
-      )}
-
-      <div className="flex gap-2">
+      <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+        {icon}
+        {label} {required && <span className="text-red-500">*</span>}
+      </Label>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         {/* Date Picker */}
-        <Popover open={isOpen} onOpenChange={setIsOpen}>
+        <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
           <PopoverTrigger asChild>
-            <Button variant="outline" className="flex-1 justify-start text-left font-normal bg-white">
+            <Button variant="outline" className="justify-start text-left font-normal bg-white" type="button">
               <CalendarIcon className="mr-2 h-4 w-4" />
-              {value ? formatDisplayDate(value) : "Pick a date"}
+              {value ? format(value, "MMM dd") : "Pick a date"}
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="start">
@@ -201,56 +199,27 @@ export function SimpleDateTimePicker({
               mode="single"
               selected={value || undefined}
               onSelect={handleDateSelect}
-              disabled={(date) => {
-                const today = new Date()
-                today.setHours(0, 0, 0, 0)
-                return date < today
-              }}
-              modifiers={{
-                past: (date) => {
-                  const today = new Date()
-                  today.setHours(0, 0, 0, 0)
-                  return date < today
-                },
-              }}
-              modifiersStyles={{
-                past: {
-                  color: "#dc2626",
-                  backgroundColor: "#fef2f2",
-                },
-              }}
+              disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
               initialFocus
             />
-            <div className="p-3 border-t">
-              <div className="text-xs text-gray-500 flex items-center gap-2">
-                <span className="inline-block w-3 h-3 bg-red-50 border border-red-200 rounded"></span>
-                Past dates (unavailable)
-              </div>
-            </div>
           </PopoverContent>
         </Popover>
 
-        {/* Time Selector */}
-        <div className="flex-1">
-          <Select value={currentTimeValue} onValueChange={handleTimeChange}>
-            <SelectTrigger className="bg-white">
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-gray-400" />
-                <SelectValue placeholder="--:-- --" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              {timeOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {/* Time Picker */}
+        <Select value={value ? value.toTimeString().slice(0, 5) : ""} onValueChange={handleTimeSelect}>
+          <SelectTrigger className="bg-white">
+            <SelectValue placeholder="--:-- --" />
+            <ChevronDown className="h-4 w-4 opacity-50" />
+          </SelectTrigger>
+          <SelectContent>
+            {timeOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value} disabled={isTimeDisabled(option.value)}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
-
-      {name && <input type="hidden" name={name} value={value?.toISOString() || ""} />}
     </div>
   )
 }
