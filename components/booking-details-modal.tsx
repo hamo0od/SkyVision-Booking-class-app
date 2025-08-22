@@ -49,13 +49,18 @@ interface Booking {
 }
 
 interface BookingDetailsModalProps {
-  booking: Booking
+  booking: Booking | null
   isOpen: boolean
   onClose: () => void
 }
 
 export function BookingDetailsModal({ booking, isOpen, onClose }: BookingDetailsModalProps) {
   const [pdfViewer, setPdfViewer] = useState<{ filePath: string; fileName: string } | null>(null)
+
+  // Early return if booking is null
+  if (!booking) {
+    return null
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
