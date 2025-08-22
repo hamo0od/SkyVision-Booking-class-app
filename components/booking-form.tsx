@@ -211,7 +211,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
             {isBulkBooking ? (
               <div className="space-y-3">
                 <Label>Select Dates *</Label>
-                <BulkDatePicker selectedDates={selectedDates} onDatesChange={setSelectedDates} />
+                <BulkDatePicker selectedDates={selectedDates} onSelectedDatesChange={setSelectedDates} />
                 {selectedDates.length > 0 && (
                   <p className="text-sm text-gray-600">
                     Selected {selectedDates.length} date{selectedDates.length > 1 ? "s" : ""}
@@ -300,23 +300,6 @@ export function BookingForm({ classrooms }: BookingFormProps) {
             </div>
           )}
 
-          {/* Classroom Selection */}
-          <div className="space-y-3">
-            <Label htmlFor="classroomId">Classroom *</Label>
-            <Select name="classroomId">
-              <SelectTrigger>
-                <SelectValue placeholder="Select a classroom" />
-              </SelectTrigger>
-              <SelectContent>
-                {classrooms.map((classroom) => (
-                  <SelectItem key={classroom.id} value={classroom.id}>
-                    {classroom.name} (Capacity: {classroom.capacity})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
           {/* Department Selection */}
           <div className="space-y-3">
             <Label htmlFor="department">Department *</Label>
@@ -338,6 +321,23 @@ export function BookingForm({ classrooms }: BookingFormProps) {
                 <SelectItem value="Commercial & Planning">Commercial & Planning</SelectItem>
                 <SelectItem value="IT">IT</SelectItem>
                 <SelectItem value="Meetings">Meetings</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Classroom Selection */}
+          <div className="space-y-3">
+            <Label htmlFor="classroomId">Classroom *</Label>
+            <Select name="classroomId">
+              <SelectTrigger>
+                <SelectValue placeholder="Select a classroom" />
+              </SelectTrigger>
+              <SelectContent>
+                {classrooms.map((classroom) => (
+                  <SelectItem key={classroom.id} value={classroom.id}>
+                    {classroom.name} (Capacity: {classroom.capacity})
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
