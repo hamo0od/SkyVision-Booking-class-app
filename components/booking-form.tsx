@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { createBooking } from "@/app/actions/bookings"
 import { SimpleDateTimePicker } from "./simple-date-time-picker"
 import { BulkDatePicker } from "./bulk-date-picker"
+import { FileText, Upload, AlertCircle } from "lucide-react"
 
 interface Classroom {
   id: string
@@ -33,6 +33,8 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   const [endTime, setEndTime] = useState("")
   const [isBulkBooking, setIsBulkBooking] = useState(false)
   const [selectedDates, setSelectedDates] = useState<string[]>([])
+  const [ecaaInstructorApproval, setEcaaInstructorApproval] = useState("true")
+  const [fileErrors, setFileErrors] = useState({ ecaa: "", trainingOrder: "" })
 
   // Generate time options (30-minute intervals from 7 AM to 11 PM)
   const generateTimeOptions = () => {
@@ -91,6 +93,8 @@ export function BookingForm({ classrooms }: BookingFormProps) {
         setEndTime("")
         setSelectedDates([])
         setIsBulkBooking(false)
+        setEcaaInstructorApproval("true")
+        setFileErrors({ ecaa: "", trainingOrder: "" })
 
         // Hide success message after 5 seconds
         setTimeout(() => {
@@ -134,6 +138,21 @@ export function BookingForm({ classrooms }: BookingFormProps) {
       return `${hours} hour${hours > 1 ? "s" : ""}`
     } else {
       return `${hours} hour${hours > 1 ? "s" : ""} ${minutes} minutes`
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: "ecaa" | "trainingOrder") => {
+    const file = e.target.files?.[0]
+    if (file && file.size > 10 * 1024 * 1024) {
+      setFileErrors((prevErrors) => ({
+        ...prevErrors,
+        [type]: "File size exceeds 10MB",
+      }))
+    } else {
+      setFileErrors((prevErrors) => ({
+        ...prevErrors,
+        [type]: "",
+      }))
     }
   }
 
@@ -367,44 +386,111 @@ export function BookingForm({ classrooms }: BookingFormProps) {
           </div>
 
           {/* ECAA Instructor Approval */}
-          <div className="space-y-4">
-            <Label>Do you have ECAA instructor approval? *</Label>
-            <RadioGroup name="ecaaInstructorApproval">
+          <div className="space-y-4 bg-purple-50 p-4 rounded-lg border border-purple-200">
+            <Label className="text-sm font-medium text-gray-700">ECAA Instructor Approval Status *</Label>
+            <RadioGroup
+              name="ecaaInstructorApproval"
+              value={ecaaInstructorApproval}
+              onValueChange={setEcaaInstructorApproval}
+              className="flex flex-col space-y-2"
+              required
+            >
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="true" id="ecaa-yes" />
-                <Label htmlFor="ecaa-yes">Yes, I have ECAA instructor approval</Label>
+                <Label htmlFor="ecaa-yes" className="text-sm">
+                  Yes, I have ECAA instructor approval
+                </Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="false" id="ecaa-no" />
-                <Label htmlFor="ecaa-no">No, I don't have ECAA instructor approval</Label>
+                <Label htmlFor="ecaa-no" className="text-sm">
+                  No, I don't have ECAA instructor approval
+                </Label>
               </div>
             </RadioGroup>
-          </div>
 
-          {/* Conditional Fields */}
-          <div className="space-y-4">
-            <div className="space-y-3">
-              <Label htmlFor="ecaaApprovalNumber">ECAA Approval Number (if applicable)</Label>
-              <Input id="ecaaApprovalNumber" name="ecaaApprovalNumber" placeholder="Enter ECAA approval number" />
-            </div>
+            {ecaaInstructorApproval === "true" && (
+              <div className="space-y-4 mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
+                <div className="space-y-2">
+                  <Label htmlFor="ecaaApprovalNumber" className="text-sm font-medium text-gray-700">
+                    ECAA Approval Number *
+                  </Label>
+                  <Input
+                    id="ecaaApprovalNumber"
+                    name="ecaaApprovalNumber"
+                    placeholder="Enter your ECAA approval number"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="ecaaApprovalFile"
+                    className="text-sm font-medium text-gray-700 flex items-center gap-2"
+                  >
+                    <FileText className="h-4 w-4" />
+                    ECAA Approval PDF *
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="ecaaApprovalFile"
+                      name="ecaaApprovalFile"
+                      type="file"
+                      accept=".pdf"
+                      onChange={(e) => handleFileChange(e, "ecaa")}
+                      className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                      required
+                    />
+                    <Upload className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                  </div>
+                  {fileErrors.ecaa && (
+                    <div className="flex items-center gap-2 text-red-600 text-sm">
+                      <AlertCircle className="h-4 w-4" />
+                      {fileErrors.ecaa}
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500">Upload your ECAA approval document (PDF only, max 10MB)</p>
+                </div>
+              </div>
+            )}
 
-            <div className="space-y-3">
-              <Label htmlFor="qualifications">Qualifications (if no ECAA approval)</Label>
-              <Textarea id="qualifications" name="qualifications" placeholder="Describe your qualifications" rows={3} />
-            </div>
+            {ecaaInstructorApproval === "false" && (
+              <div className="space-y-2 mt-4 p-4 bg-orange-50 rounded-lg border border-orange-200">
+                <Label htmlFor="qualifications" className="text-sm font-medium text-gray-700">
+                  Your Qualifications *
+                </Label>
+                <Textarea
+                  id="qualifications"
+                  name="qualifications"
+                  placeholder="Please describe your relevant qualifications and experience"
+                  className="min-h-[80px] resize-none"
+                  required
+                />
+              </div>
+            )}
           </div>
 
           {/* File Uploads */}
           <div className="space-y-4">
             <div className="space-y-3">
-              <Label htmlFor="ecaaApprovalFile">ECAA Approval PDF (if applicable)</Label>
-              <Input id="ecaaApprovalFile" name="ecaaApprovalFile" type="file" accept=".pdf" />
-              <p className="text-sm text-gray-500">Upload your ECAA approval document (PDF only, max 10MB)</p>
-            </div>
-
-            <div className="space-y-3">
               <Label htmlFor="trainingOrderFile">Training Order PDF *</Label>
-              <Input id="trainingOrderFile" name="trainingOrderFile" type="file" accept=".pdf" required />
+              <div className="relative">
+                <Input
+                  id="trainingOrderFile"
+                  name="trainingOrderFile"
+                  type="file"
+                  accept=".pdf"
+                  onChange={(e) => handleFileChange(e, "trainingOrder")}
+                  className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  required
+                />
+                <Upload className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+              </div>
+              {fileErrors.trainingOrder && (
+                <div className="flex items-center gap-2 text-red-600 text-sm">
+                  <AlertCircle className="h-4 w-4" />
+                  {fileErrors.trainingOrder}
+                </div>
+              )}
               <p className="text-sm text-gray-500">Upload your training order document (PDF only, max 10MB)</p>
             </div>
           </div>

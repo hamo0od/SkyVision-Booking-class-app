@@ -1,38 +1,34 @@
 "use client"
 
 import { useState } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { cancelBooking } from "@/app/actions/bookings"
 import { BookingDetailsModal } from "./booking-details-modal"
+import { cancelBooking } from "@/app/actions/bookings"
+import { Calendar, Clock, MapPin, Users, FileText, AlertCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface Booking {
   id: string
+  purpose: string
   startTime: string
   endTime: string
-  purpose: string
-  status: string
+  status: "pending" | "approved" | "rejected"
+  classroom: {
+    name: string
+  }
   participants: number
   instructorName: string
   trainingOrder: string
   courseReference?: string
-  department?: string
+  department: string
   ecaaInstructorApproval: boolean
   ecaaApprovalNumber?: string
   qualifications?: string
-  ecaaApprovalFile?: string
-  trainingOrderFile?: string
+  createdAt: string
+  isBulkBooking?: boolean
   bulkBookingId?: string
-  user: {
-    name?: string
-    email: string
-  }
-  classroom: {
-    name: string
-    capacity: number
-  }
 }
 
 interface BookingListProps {
@@ -40,171 +36,188 @@ interface BookingListProps {
 }
 
 export function BookingList({ bookings }: BookingListProps) {
+  const { toast } = useToast()
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const { toast } = useToast()
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
 
-  const handleCancel = async (bookingId: string) => {
-    if (confirm("Are you sure you want to cancel this booking?")) {
-      try {
-        const result = await cancelBooking(bookingId)
-        if (result.success) {
-          toast({
-            title: "Success",
-            description: result.message,
-          })
-        }
-      } catch (error) {
-        toast({
-          title: "Error",
-          description: error instanceof Error ? error.message : "Failed to cancel booking",
-          variant: "destructive",
-        })
-      }
-    }
-  }
-
-  const openModal = (booking: Booking) => {
+  const handleViewDetails = (booking: Booking) => {
     setSelectedBooking(booking)
     setIsModalOpen(true)
   }
 
-  const getStatusBadge = (status: string) => {
+  const handleCancelBooking = async (bookingId: string) => {
+    setCancellingId(bookingId)
+    try {
+      const result = await cancelBooking(bookingId)
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: "Booking cancelled successfully",
+        })
+        // Refresh the page to show updated bookings
+        window.location.reload()
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to cancel booking",
+        variant: "destructive",
+      })
+    } finally {
+      setCancellingId(null)
+    }
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      weekday: "short",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    })
+  }
+
+  const formatTime = (dateString: string) => {
+    return new Date(dateString).toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    })
+  }
+
+  const getStatusColor = (status: string) => {
     switch (status) {
-      case "APPROVED":
-        return <Badge className="bg-green-100 text-green-800">Approved</Badge>
-      case "REJECTED":
-        return <Badge className="bg-red-100 text-red-800">Rejected</Badge>
+      case "approved":
+        return "bg-green-100 text-green-800 border-green-200"
+      case "rejected":
+        return "bg-red-100 text-red-800 border-red-200"
       default:
-        return <Badge className="bg-yellow-100 text-yellow-800">Pending</Badge>
+        return "bg-yellow-100 text-yellow-800 border-yellow-200"
     }
   }
 
-  const formatDateTime = (dateTime: string) => {
-    return new Date(dateTime).toLocaleString()
-  }
-
-  const isBulkBooking = (booking: Booking) => {
-    return booking.purpose.startsWith("BULK_BOOKING:")
-  }
-
-  const getBulkBookingInfo = (booking: Booking) => {
-    if (!isBulkBooking(booking)) return null
-
-    const [, datesStr, actualPurpose] = booking.purpose.split(":", 3)
-    const dates = datesStr.split(",")
-
-    return {
-      dates,
-      actualPurpose,
-      dateCount: dates.length,
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "approved":
+        return "✓"
+      case "rejected":
+        return "✗"
+      default:
+        return "⏳"
     }
   }
 
-  const canCancel = (booking: Booking) => {
-    if (booking.status === "REJECTED") return false
-    if (booking.status === "APPROVED" && new Date(booking.startTime) < new Date()) return false
-    return true
+  if (bookings.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Your Bookings</CardTitle>
+          <CardDescription>You haven't made any bookings yet.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8">
+            <Calendar className="mx-auto h-12 w-12 text-gray-400" />
+            <h3 className="mt-2 text-sm font-medium text-gray-900">No bookings</h3>
+            <p className="mt-1 text-sm text-gray-500">Get started by creating your first classroom booking.</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
-    <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
-      {bookings.length === 0 ? (
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-center text-gray-500">No bookings found.</p>
-          </CardContent>
-        </Card>
-      ) : (
-        bookings.map((booking) => {
-          const bulkInfo = getBulkBookingInfo(booking)
-
-          return (
-            <Card key={booking.id}>
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle className="text-lg">
-                      {booking.classroom.name}
-                      {bulkInfo && (
-                        <span className="ml-2 text-sm font-normal text-blue-600">
-                          (Bulk: {bulkInfo.dateCount} dates)
-                        </span>
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            Your Bookings
+          </CardTitle>
+          <CardDescription>Manage your classroom booking requests</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="max-h-96 overflow-y-auto pr-2 space-y-4">
+            {bookings.map((booking) => (
+              <div key={booking.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow bg-white">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-gray-900 line-clamp-1">{booking.purpose}</h3>
+                      {booking.isBulkBooking && (
+                        <Badge variant="outline" className="text-xs">
+                          Bulk
+                        </Badge>
                       )}
-                    </CardTitle>
-                    <CardDescription>
-                      {booking.participants} participants
-                      {booking.department && ` • ${booking.department}`}
-                    </CardDescription>
-                  </div>
-                  {getStatusBadge(booking.status)}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <strong>Start:</strong> {formatDateTime(booking.startTime)}
                     </div>
-                    <div>
-                      <strong>End:</strong> {formatDateTime(booking.endTime)}
-                    </div>
-                    <div>
-                      <strong>Instructor:</strong> {booking.instructorName}
-                    </div>
-                    <div>
-                      <strong>Training Order:</strong> {booking.trainingOrder}
-                    </div>
-                    {booking.courseReference && (
-                      <div>
-                        <strong>Course Reference:</strong> {booking.courseReference}
-                      </div>
-                    )}
-                    {booking.department && (
-                      <div>
-                        <strong>Department:</strong> {booking.department}
-                      </div>
-                    )}
-                  </div>
 
-                  <div>
-                    <strong>Purpose:</strong> {bulkInfo ? bulkInfo.actualPurpose : booking.purpose}
-                  </div>
-
-                  {bulkInfo && (
-                    <div>
-                      <strong>Selected Dates:</strong>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {bulkInfo.dates.map((date, index) => (
-                          <Badge key={index} variant="outline" className="text-xs">
-                            {new Date(date).toLocaleDateString()}
-                          </Badge>
-                        ))}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-600">
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-4 w-4" />
+                        <span>{formatDate(booking.startTime)}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        <span>
+                          {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <MapPin className="h-4 w-4" />
+                        <span>{booking.classroom.name}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Users className="h-4 w-4" />
+                        <span>{booking.participants} participants</span>
                       </div>
                     </div>
-                  )}
 
-                  <div className="flex gap-2 mt-4">
-                    <Button variant="outline" size="sm" onClick={() => openModal(booking)}>
-                      View Details
+                    <div className="flex items-center gap-2">
+                      <Badge className={`text-xs ${getStatusColor(booking.status)}`}>
+                        {getStatusIcon(booking.status)}{" "}
+                        {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                      </Badge>
+                      <span className="text-xs text-gray-500">Submitted {formatDate(booking.createdAt)}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2 ml-4">
+                    <Button variant="outline" size="sm" onClick={() => handleViewDetails(booking)} className="text-xs">
+                      <FileText className="h-3 w-3 mr-1" />
+                      Details
                     </Button>
-
-                    {canCancel(booking) && (
-                      <Button size="sm" variant="destructive" onClick={() => handleCancel(booking.id)}>
+                    {booking.status === "pending" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleCancelBooking(booking.id)}
+                        disabled={cancellingId === booking.id}
+                        className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        {cancellingId === booking.id ? (
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600 mr-1" />
+                        ) : (
+                          <AlertCircle className="h-3 w-3 mr-1" />
+                        )}
                         Cancel
                       </Button>
                     )}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          )
-        })
-      )}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
-      {selectedBooking && (
-        <BookingDetailsModal booking={selectedBooking} isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
-      )}
-    </div>
+      <BookingDetailsModal
+        booking={selectedBooking}
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false)
+          setSelectedBooking(null)
+        }}
+      />
+    </>
   )
 }

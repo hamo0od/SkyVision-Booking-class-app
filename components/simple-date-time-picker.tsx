@@ -119,8 +119,27 @@ export function SimpleDateTimePicker({
               }
             }}
             disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+            modifiers={{
+              past: (date) => {
+                const today = new Date()
+                today.setHours(0, 0, 0, 0)
+                return date < today
+              },
+            }}
+            modifiersStyles={{
+              past: {
+                color: "#dc2626",
+                backgroundColor: "#fef2f2",
+              },
+            }}
             initialFocus
           />
+          <div className="p-3 border-t">
+            <div className="text-xs text-gray-500 flex items-center gap-2">
+              <span className="inline-block w-3 h-3 bg-red-50 border border-red-200 rounded"></span>
+              Past dates (unavailable)
+            </div>
+          </div>
         </PopoverContent>
       </Popover>
     )
@@ -142,6 +161,19 @@ export function SimpleDateTimePicker({
             selected={selectedDate}
             onSelect={handleDateSelect}
             disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+            modifiers={{
+              past: (date) => {
+                const today = new Date()
+                today.setHours(0, 0, 0, 0)
+                return date < today
+              },
+            }}
+            modifiersStyles={{
+              past: {
+                color: "#dc2626",
+                backgroundColor: "#fef2f2",
+              },
+            }}
             initialFocus
           />
         </PopoverContent>
