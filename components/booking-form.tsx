@@ -206,16 +206,84 @@ export function BookingForm({ classrooms }: BookingFormProps) {
             </RadioGroup>
           </div>
 
+          {/* Classroom Selection - Moved here */}
+          <div className="space-y-3 bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <Label htmlFor="classroomId" className="text-base font-semibold text-blue-800">
+              🏫 Select Classroom First *
+            </Label>
+            <Select name="classroomId">
+              <SelectTrigger className="h-12 bg-white">
+                <SelectValue placeholder="👆 Choose your classroom before proceeding" />
+              </SelectTrigger>
+              <SelectContent>
+                {classrooms.map((classroom) => (
+                  <SelectItem key={classroom.id} value={classroom.id}>
+                    <div className="flex flex-col items-start py-1">
+                      <span className="font-medium">{classroom.name}</span>
+                      <span className="text-sm text-gray-500">Capacity: {classroom.capacity} people</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-blue-600">Select your preferred classroom before choosing dates and times.</p>
+          </div>
+
           {/* Date Selection */}
           <div className="space-y-4">
             {isBulkBooking ? (
               <div className="space-y-3">
-                <Label>Select Dates *</Label>
+                <Label>Select Multiple Dates *</Label>
                 <BulkDatePicker selectedDates={selectedDates} onSelectedDatesChange={setSelectedDates} />
+
+                {/* Enhanced display of selected dates */}
                 {selectedDates.length > 0 && (
-                  <p className="text-sm text-gray-600">
-                    Selected {selectedDates.length} date{selectedDates.length > 1 ? "s" : ""}
-                  </p>
+                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="text-sm font-medium text-green-800">
+                        📅 Selected Dates ({selectedDates.length})
+                      </Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedDates([])}
+                        className="text-xs text-red-600 hover:text-red-700"
+                      >
+                        Clear All
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {selectedDates.map((dateStr, index) => (
+                        <div
+                          key={dateStr}
+                          className="flex items-center justify-between bg-white p-2 rounded border border-green-300"
+                        >
+                          <span className="text-sm font-medium">
+                            {new Date(dateStr).toLocaleDateString("en-US", {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newDates = selectedDates.filter((date) => date !== dateStr)
+                              setSelectedDates(newDates)
+                            }}
+                            className="ml-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-full p-1"
+                            title="Remove this date"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-green-600 mt-2">
+                      💡 Click ✕ to remove individual dates, or "Clear All" to start over.
+                    </p>
+                  </div>
                 )}
               </div>
             ) : (
@@ -321,23 +389,6 @@ export function BookingForm({ classrooms }: BookingFormProps) {
                 <SelectItem value="Commercial & Planning">Commercial & Planning</SelectItem>
                 <SelectItem value="IT">IT</SelectItem>
                 <SelectItem value="Meetings">Meetings</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Classroom Selection */}
-          <div className="space-y-3">
-            <Label htmlFor="classroomId">Classroom *</Label>
-            <Select name="classroomId">
-              <SelectTrigger>
-                <SelectValue placeholder="Select a classroom" />
-              </SelectTrigger>
-              <SelectContent>
-                {classrooms.map((classroom) => (
-                  <SelectItem key={classroom.id} value={classroom.id}>
-                    {classroom.name} (Capacity: {classroom.capacity})
-                  </SelectItem>
-                ))}
               </SelectContent>
             </Select>
           </div>
