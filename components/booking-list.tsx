@@ -108,7 +108,7 @@ export function BookingList({ bookings }: BookingListProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
       {bookings.length === 0 ? (
         <Card>
           <CardContent className="pt-6">
