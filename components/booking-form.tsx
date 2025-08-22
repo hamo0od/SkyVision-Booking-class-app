@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-import { toast } from "@/components/ui/use-toast"
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -34,11 +33,6 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   const [endTime, setEndTime] = useState("")
   const [isBulkBooking, setIsBulkBooking] = useState(false)
   const [selectedDates, setSelectedDates] = useState<string[]>([])
-  const [selectedClassroom, setSelectedClassroom] = useState("")
-  const [bulkStartTime, setBulkStartTime] = useState("")
-  const [bulkEndTime, setBulkEndTime] = useState("")
-  const [ecaaInstructorApproval, setEcaaInstructorApproval] = useState("")
-  const [fileErrors, setFileErrors] = useState({})
 
   // Generate time options (30-minute intervals from 7 AM to 11 PM)
   const generateTimeOptions = () => {
@@ -68,14 +62,14 @@ export function BookingForm({ classrooms }: BookingFormProps) {
     return timeOptions.slice(startIndex + 1)
   }
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault()
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
     setIsLoading(true)
     setError("")
     setIsSuccess(false)
 
     try {
-      const formData = new FormData(event.currentTarget)
+      const formData = new FormData(e.target as HTMLFormElement)
 
       // Add bulk booking data
       formData.set("isBulkBooking", isBulkBooking.toString())
@@ -88,31 +82,20 @@ export function BookingForm({ classrooms }: BookingFormProps) {
       const result = await createBooking(formData)
 
       if (result.success) {
-        toast({
-          title: "Success!",
-          description: result.message,
-        })
-
-        // Show additional success message
-        toast({
-          title: "Booking Submitted Successfully!",
-          description: "Your booking request is pending approval. You will be notified once it's reviewed.",
-          duration: 5000,
-        })
-
+        setIsSuccess(true)
         // Reset form
-        const form = event.currentTarget
+        const form = e.target as HTMLFormElement
         form.reset()
-        setSelectedClassroom("")
-        setSelectedDate(null)
-        setStartTime(null)
-        setEndTime(null)
-        setBulkStartTime(null)
-        setBulkEndTime(null)
-        setEcaaInstructorApproval("")
-        setIsBulkBooking(false)
+        setSelectedDate("")
+        setStartTime("")
+        setEndTime("")
         setSelectedDates([])
-        setFileErrors({})
+        setIsBulkBooking(false)
+
+        // Hide success message after 5 seconds
+        setTimeout(() => {
+          setIsSuccess(false)
+        }, 5000)
       }
     } catch (error) {
       setError(error instanceof Error ? error.message : "An error occurred")
@@ -301,7 +284,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
           {/* Classroom Selection */}
           <div className="space-y-3">
             <Label htmlFor="classroomId">Classroom *</Label>
-            <Select name="classroomId" onValueChange={setSelectedClassroom}>
+            <Select name="classroomId">
               <SelectTrigger>
                 <SelectValue placeholder="Select a classroom" />
               </SelectTrigger>
@@ -386,7 +369,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
           {/* ECAA Instructor Approval */}
           <div className="space-y-4">
             <Label>Do you have ECAA instructor approval? *</Label>
-            <RadioGroup name="ecaaInstructorApproval" onValueChange={setEcaaInstructorApproval}>
+            <RadioGroup name="ecaaInstructorApproval">
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="true" id="ecaa-yes" />
                 <Label htmlFor="ecaa-yes">Yes, I have ECAA instructor approval</Label>
