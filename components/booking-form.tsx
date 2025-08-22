@@ -425,15 +425,10 @@ export function BookingForm({ classrooms }: BookingFormProps) {
             </div>
           </div>
 
+          {/* Course Title */}
           <div className="space-y-3">
-            <Label htmlFor="purpose">Purpose of Booking *</Label>
-            <Textarea
-              id="purpose"
-              name="purpose"
-              required
-              placeholder="Describe the purpose of your booking"
-              rows={3}
-            />
+            <Label htmlFor="purpose">Course Title *</Label>
+            <Textarea id="purpose" name="purpose" required placeholder="Enter the course title" rows={3} />
           </div>
 
           {/* ECAA Instructor Approval */}
