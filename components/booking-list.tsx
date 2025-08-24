@@ -14,7 +14,7 @@ interface Booking {
   purpose: string
   startTime: string
   endTime: string
-  status: "pending" | "approved" | "rejected"
+  status: "PENDING" | "APPROVED" | "REJECTED"
   classroom: {
     name: string
   }
@@ -87,7 +87,8 @@ export function BookingList({ bookings }: BookingListProps) {
   }
 
   const getStatusColor = (status: string) => {
-    switch (status) {
+    const statusLower = status.toLowerCase()
+    switch (statusLower) {
       case "approved":
         return "bg-green-100 text-green-800 border-green-200"
       case "rejected":
@@ -98,7 +99,8 @@ export function BookingList({ bookings }: BookingListProps) {
   }
 
   const getStatusIcon = (status: string) => {
-    switch (status) {
+    const statusLower = status.toLowerCase()
+    switch (statusLower) {
       case "approved":
         return "✓"
       case "rejected":
@@ -106,6 +108,10 @@ export function BookingList({ bookings }: BookingListProps) {
       default:
         return "⏳"
     }
+  }
+
+  const isPending = (status: string) => {
+    return status.toUpperCase() === "PENDING"
   }
 
   if (bookings.length === 0) {
@@ -143,8 +149,12 @@ export function BookingList({ bookings }: BookingListProps) {
                 <div className="flex items-start justify-between">
                   <div className="flex-1 space-y-2">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-gray-900 line-clamp-1">{booking.purpose}</h3>
-                      {booking.isBulkBooking && (
+                      <h3 className="font-semibold text-gray-900 line-clamp-1">
+                        {booking.purpose.startsWith("BULK_BOOKING:")
+                          ? booking.purpose.split(":")[2] || "Bulk Booking"
+                          : booking.purpose}
+                      </h3>
+                      {booking.purpose.startsWith("BULK_BOOKING:") && (
                         <Badge variant="outline" className="text-xs">
                           Bulk
                         </Badge>
@@ -175,7 +185,7 @@ export function BookingList({ bookings }: BookingListProps) {
                     <div className="flex items-center gap-2">
                       <Badge className={`text-xs ${getStatusColor(booking.status)}`}>
                         {getStatusIcon(booking.status)}{" "}
-                        {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                        {booking.status.charAt(0).toUpperCase() + booking.status.slice(1).toLowerCase()}
                       </Badge>
                       <span className="text-xs text-gray-500">Submitted {formatDate(booking.createdAt)}</span>
                     </div>
@@ -186,7 +196,7 @@ export function BookingList({ bookings }: BookingListProps) {
                       <FileText className="h-3 w-3 mr-1" />
                       Details
                     </Button>
-                    {booking.status === "pending" && (
+                    {isPending(booking.status) && (
                       <Button
                         variant="destructive"
                         size="sm"
