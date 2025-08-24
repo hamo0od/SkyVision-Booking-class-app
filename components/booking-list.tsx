@@ -143,9 +143,7 @@ export function BookingList({ bookings }: BookingListProps) {
                 <div className="flex items-start justify-between">
                   <div className="flex-1 space-y-2">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-gray-900 line-clamp-1">
-                        {booking.courseReference || "Course Title"}
-                      </h3>
+                      <h3 className="font-semibold text-gray-900 line-clamp-1">{booking.purpose}</h3>
                       {booking.isBulkBooking && (
                         <Badge variant="outline" className="text-xs">
                           Bulk
@@ -188,7 +186,7 @@ export function BookingList({ bookings }: BookingListProps) {
                       <FileText className="h-3 w-3 mr-1" />
                       Details
                     </Button>
-                    {(booking.status === "pending" || booking.status === "approved") && (
+                    {booking.status === "pending" && (
                       <Button
                         variant="outline"
                         size="sm"
