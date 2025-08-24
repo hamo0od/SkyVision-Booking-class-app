@@ -181,21 +181,21 @@ export function BookingList({ bookings }: BookingListProps) {
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-2 ml-4">
+                  <div className="flex flex-col sm:flex-row gap-2 ml-4">
                     <Button variant="outline" size="sm" onClick={() => handleViewDetails(booking)} className="text-xs">
                       <FileText className="h-3 w-3 mr-1" />
                       Details
                     </Button>
                     {booking.status === "pending" && (
                       <Button
-                        variant="outline"
+                        variant="destructive"
                         size="sm"
                         onClick={() => handleCancelBooking(booking.id)}
                         disabled={cancellingId === booking.id}
-                        className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                        className="text-xs"
                       >
                         {cancellingId === booking.id ? (
-                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600 mr-1" />
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1" />
                         ) : (
                           <AlertCircle className="h-3 w-3 mr-1" />
                         )}
