@@ -20,6 +20,73 @@ async function deleteFile(filePath: string) {
   }
 }
 
+// Helper function to check for booking conflicts
+async function checkBookingConflict(classroomId: string, startTime: Date, endTime: Date, excludeBookingId?: string) {
+  const whereClause: any = {
+    classroomId,
+    status: { in: ["PENDING", "APPROVED"] },
+    AND: [
+      {
+        OR: [
+          // New booking starts during existing booking
+          {
+            startTime: { lte: startTime },
+            endTime: { gt: startTime },
+          },
+          // New booking ends during existing booking
+          {
+            startTime: { lt: endTime },
+            endTime: { gte: endTime },
+          },
+          // New booking completely contains existing booking
+          {
+            startTime: { gte: startTime },
+            endTime: { lte: endTime },
+          },
+          // Existing booking completely contains new booking
+          {
+            startTime: { lte: startTime },
+            endTime: { gte: endTime },
+          },
+        ],
+      },
+    ],
+  }
+
+  // Exclude a specific booking (useful for updates)
+  if (excludeBookingId) {
+    whereClause.id = { not: excludeBookingId }
+  }
+
+  const conflict = await prisma.booking.findFirst({
+    where: whereClause,
+    include: {
+      user: {
+        select: {
+          name: true,
+          email: true,
+        },
+      },
+    },
+  })
+
+  return conflict
+}
+
+// Helper function to extract dates from bulk booking purpose
+function extractDatesFromBulkPurpose(purpose: string): string[] {
+  if (!purpose.startsWith("BULK_BOOKING:")) {
+    return []
+  }
+
+  const parts = purpose.split(":")
+  if (parts.length < 3) {
+    return []
+  }
+
+  return parts[1].split(",")
+}
+
 export async function createBooking(formData: FormData) {
   const session = await getServerSession(authOptions)
 
@@ -196,29 +263,24 @@ export async function createBooking(formData: FormData) {
         const bookingStartTime = new Date(`${dateStr}T${startTime.toTimeString().split(" ")[0]}`)
         const bookingEndTime = new Date(`${dateStr}T${endTime.toTimeString().split(" ")[0]}`)
 
-        const conflict = await prisma.booking.findFirst({
-          where: {
-            classroomId,
-            status: { in: ["PENDING", "APPROVED"] },
-            OR: [
-              {
-                startTime: { lte: bookingStartTime },
-                endTime: { gt: bookingStartTime },
-              },
-              {
-                startTime: { lt: bookingEndTime },
-                endTime: { gte: bookingEndTime },
-              },
-              {
-                startTime: { gte: bookingStartTime },
-                endTime: { lte: bookingEndTime },
-              },
-            ],
-          },
-        })
+        // Enhanced conflict detection
+        const conflict = await checkBookingConflict(classroomId, bookingStartTime, bookingEndTime)
 
         if (conflict) {
-          throw new Error(`Time slot conflicts with existing booking on ${dateStr}`)
+          // Check if it's a bulk booking conflict
+          if (conflict.purpose.startsWith("BULK_BOOKING:")) {
+            const conflictDates = extractDatesFromBulkPurpose(conflict.purpose)
+            const conflictDateStr = dateStr
+            if (conflictDates.includes(conflictDateStr)) {
+              throw new Error(
+                `Time slot conflicts with existing bulk booking on ${dateStr} from ${conflict.startTime.toLocaleTimeString()} to ${conflict.endTime.toLocaleTimeString()}`,
+              )
+            }
+          } else {
+            throw new Error(
+              `Time slot conflicts with existing booking on ${dateStr} from ${conflict.startTime.toLocaleTimeString()} to ${conflict.endTime.toLocaleTimeString()}`,
+            )
+          }
         }
       }
 
@@ -258,31 +320,24 @@ export async function createBooking(formData: FormData) {
         message: `Bulk booking request for ${selectedDates.length} dates submitted successfully!`,
       }
     } else {
-      // Single booking
-      // Check for conflicts
-      const conflict = await prisma.booking.findFirst({
-        where: {
-          classroomId,
-          status: { in: ["PENDING", "APPROVED"] },
-          OR: [
-            {
-              startTime: { lte: startTime },
-              endTime: { gt: startTime },
-            },
-            {
-              startTime: { lt: endTime },
-              endTime: { gte: endTime },
-            },
-            {
-              startTime: { gte: startTime },
-              endTime: { lte: endTime },
-            },
-          ],
-        },
-      })
+      // Single booking - Enhanced conflict detection
+      const conflict = await checkBookingConflict(classroomId, startTime, endTime)
 
       if (conflict) {
-        throw new Error("Time slot conflicts with existing booking")
+        // Provide more detailed conflict information
+        const conflictDate = conflict.startTime.toLocaleDateString()
+        const conflictStartTime = conflict.startTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        const conflictEndTime = conflict.endTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+
+        if (conflict.purpose.startsWith("BULK_BOOKING:")) {
+          throw new Error(
+            `Time slot conflicts with existing bulk booking on ${conflictDate} from ${conflictStartTime} to ${conflictEndTime}`,
+          )
+        } else {
+          throw new Error(
+            `Time slot conflicts with existing booking on ${conflictDate} from ${conflictStartTime} to ${conflictEndTime}`,
+          )
+        }
       }
 
       await prisma.booking.create({
