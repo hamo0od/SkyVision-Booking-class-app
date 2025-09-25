@@ -20,59 +20,6 @@ async function deleteFile(filePath: string) {
   }
 }
 
-// Helper function to check for booking conflicts
-async function checkBookingConflict(classroomId: string, startTime: Date, endTime: Date, excludeBookingId?: string) {
-  const whereClause: any = {
-    classroomId,
-    status: { in: ["PENDING", "APPROVED"] },
-    AND: [
-      {
-        OR: [
-          // New booking starts during existing booking
-          {
-            startTime: { lte: startTime },
-            endTime: { gt: startTime },
-          },
-          // New booking ends during existing booking
-          {
-            startTime: { lt: endTime },
-            endTime: { gte: endTime },
-          },
-          // New booking completely contains existing booking
-          {
-            startTime: { gte: startTime },
-            endTime: { lte: endTime },
-          },
-          // Existing booking completely contains new booking
-          {
-            startTime: { lte: startTime },
-            endTime: { gte: endTime },
-          },
-        ],
-      },
-    ],
-  }
-
-  // Exclude a specific booking (useful for updates)
-  if (excludeBookingId) {
-    whereClause.id = { not: excludeBookingId }
-  }
-
-  const conflict = await prisma.booking.findFirst({
-    where: whereClause,
-    include: {
-      user: {
-        select: {
-          name: true,
-          email: true,
-        },
-      },
-    },
-  })
-
-  return conflict
-}
-
 // Helper function to extract dates from bulk booking purpose
 function extractDatesFromBulkPurpose(purpose: string): string[] {
   if (!purpose.startsWith("BULK_BOOKING:")) {
@@ -85,6 +32,81 @@ function extractDatesFromBulkPurpose(purpose: string): string[] {
   }
 
   return parts[1].split(",")
+}
+
+// Helper function to check if two time ranges overlap
+function timeRangesOverlap(start1: Date, end1: Date, start2: Date, end2: Date): boolean {
+  return start1 < end2 && start2 < end1
+}
+
+// Helper function to check for booking conflicts
+async function checkBookingConflict(classroomId: string, startTime: Date, endTime: Date, excludeBookingId?: string) {
+  const whereClause: any = {
+    classroomId,
+    status: { in: ["PENDING", "APPROVED"] },
+  }
+
+  // Exclude a specific booking (useful for updates)
+  if (excludeBookingId) {
+    whereClause.id = { not: excludeBookingId }
+  }
+
+  const existingBookings = await prisma.booking.findMany({
+    where: whereClause,
+    include: {
+      user: {
+        select: {
+          name: true,
+          email: true,
+        },
+      },
+    },
+  })
+
+  // Check each existing booking for conflicts
+  for (const booking of existingBookings) {
+    if (booking.purpose.startsWith("BULK_BOOKING:")) {
+      // Handle bulk booking conflicts
+      const bulkDates = extractDatesFromBulkPurpose(booking.purpose)
+      const newBookingDateStr = startTime.toISOString().split("T")[0] // Get YYYY-MM-DD format
+
+      // Check if the new booking date matches any of the bulk booking dates
+      for (const bulkDateStr of bulkDates) {
+        const bulkDate = new Date(bulkDateStr)
+        const bulkDateFormatted = bulkDate.toISOString().split("T")[0]
+
+        if (newBookingDateStr === bulkDateFormatted) {
+          // Same date, now check time overlap
+          // Create full datetime objects for the bulk booking on this specific date
+          const bulkStartTime = new Date(`${bulkDateStr}T${booking.startTime.toTimeString().split(" ")[0]}`)
+          const bulkEndTime = new Date(`${bulkDateStr}T${booking.endTime.toTimeString().split(" ")[0]}`)
+
+          if (timeRangesOverlap(startTime, endTime, bulkStartTime, bulkEndTime)) {
+            return {
+              ...booking,
+              conflictDate: bulkDateStr,
+              conflictStartTime: bulkStartTime,
+              conflictEndTime: bulkEndTime,
+              isBulkBooking: true,
+            }
+          }
+        }
+      }
+    } else {
+      // Handle regular booking conflicts
+      if (timeRangesOverlap(startTime, endTime, booking.startTime, booking.endTime)) {
+        return {
+          ...booking,
+          conflictDate: booking.startTime.toISOString().split("T")[0],
+          conflictStartTime: booking.startTime,
+          conflictEndTime: booking.endTime,
+          isBulkBooking: false,
+        }
+      }
+    }
+  }
+
+  return null
 }
 
 export async function createBooking(formData: FormData) {
@@ -267,18 +289,23 @@ export async function createBooking(formData: FormData) {
         const conflict = await checkBookingConflict(classroomId, bookingStartTime, bookingEndTime)
 
         if (conflict) {
-          // Check if it's a bulk booking conflict
-          if (conflict.purpose.startsWith("BULK_BOOKING:")) {
-            const conflictDates = extractDatesFromBulkPurpose(conflict.purpose)
-            const conflictDateStr = dateStr
-            if (conflictDates.includes(conflictDateStr)) {
-              throw new Error(
-                `Time slot conflicts with existing bulk booking on ${dateStr} from ${conflict.startTime.toLocaleTimeString()} to ${conflict.endTime.toLocaleTimeString()}`,
-              )
-            }
+          const conflictDate = new Date(conflict.conflictDate).toLocaleDateString()
+          const conflictStartTime = conflict.conflictStartTime.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+          const conflictEndTime = conflict.conflictEndTime.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+
+          if (conflict.isBulkBooking) {
+            throw new Error(
+              `Time slot conflicts with existing bulk booking on ${conflictDate} from ${conflictStartTime} to ${conflictEndTime}`,
+            )
           } else {
             throw new Error(
-              `Time slot conflicts with existing booking on ${dateStr} from ${conflict.startTime.toLocaleTimeString()} to ${conflict.endTime.toLocaleTimeString()}`,
+              `Time slot conflicts with existing booking on ${conflictDate} from ${conflictStartTime} to ${conflictEndTime}`,
             )
           }
         }
@@ -325,11 +352,14 @@ export async function createBooking(formData: FormData) {
 
       if (conflict) {
         // Provide more detailed conflict information
-        const conflictDate = conflict.startTime.toLocaleDateString()
-        const conflictStartTime = conflict.startTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-        const conflictEndTime = conflict.endTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        const conflictDate = new Date(conflict.conflictDate).toLocaleDateString()
+        const conflictStartTime = conflict.conflictStartTime.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+        const conflictEndTime = conflict.conflictEndTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 
-        if (conflict.purpose.startsWith("BULK_BOOKING:")) {
+        if (conflict.isBulkBooking) {
           throw new Error(
             `Time slot conflicts with existing bulk booking on ${conflictDate} from ${conflictStartTime} to ${conflictEndTime}`,
           )
