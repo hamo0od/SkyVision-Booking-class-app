@@ -35,17 +35,14 @@ export function ModernDateTimePicker({
   onSelectedDatesChange,
   timeOnly = false,
 }: ModernDateTimePickerProps) {
-  const [isOpen, setIsOpen] = useState<boolean>(false)
+  const [isOpen, setIsOpen] = useState(false)
   const [selectedCalendarDates, setSelectedCalendarDates] = useState<Date[]>([])
 
   // Convert string dates to Date objects for calendar
   useEffect(() => {
-    if (isBulkBooking && selectedDates && selectedDates.length > 0) {
-      const dateObjects = selectedDates.map((dateStr) => {
-        const dateObj = new Date(dateStr)
-        return isNaN(dateObj.getTime()) ? new Date() : dateObj
-      })
-      setSelectedCalendarDates(dateObjects)
+    if (isBulkBooking && selectedDates.length > 0) {
+      const dates = selectedDates.map((dateStr) => new Date(dateStr))
+      setSelectedCalendarDates(dates)
     }
   }, [selectedDates, isBulkBooking])
 

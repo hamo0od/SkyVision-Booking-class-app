@@ -110,172 +110,172 @@ async function checkBookingConflict(classroomId: string, startTime: Date, endTim
 }
 
 export async function createBooking(formData: FormData) {
-  try {
-    const session = await getServerSession(authOptions)
+  const session = await getServerSession(authOptions)
 
-    if (!session?.user?.email) {
-      throw new Error("Unauthorized - No session found")
+  if (!session?.user?.email) {
+    throw new Error("Unauthorized - No session found")
+  }
+
+  // Get the actual user from database using email
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+  })
+
+  if (!user) {
+    throw new Error("User not found in database")
+  }
+
+  const classroomId = sanitizeInput((formData.get("classroomId") as string | null)?.trim() || "")
+  const startTimeRaw = formData.get("startTime") as string | null
+  const endTimeRaw = formData.get("endTime") as string | null
+  const purpose = sanitizeInput((formData.get("purpose") as string | null)?.trim() || "")
+  const instructorName = sanitizeInput((formData.get("instructorName") as string | null)?.trim() || "")
+  const trainingOrder = sanitizeInput((formData.get("trainingOrder") as string | null)?.trim() || "")
+  const courseReference = sanitizeInput((formData.get("courseReference") as string | null)?.trim() || "")
+  const department = sanitizeInput((formData.get("department") as string | null)?.trim() || "")
+  const participants = Number.parseInt((formData.get("participants") as string | null) || "0", 10)
+  const ecaaInstructorApprovalRaw = formData.get("ecaaInstructorApproval") as string | null
+
+  // Handle bulk booking
+  const isBulkBooking = formData.get("isBulkBooking") === "true"
+  const selectedDates = formData.getAll("selectedDates") as string[]
+
+  // Require explicit ECAA choice: must be "true" or "false"
+  if (ecaaInstructorApprovalRaw !== "true" && ecaaInstructorApprovalRaw !== "false") {
+    throw new Error("Please select your ECAA instructor approval status")
+  }
+  const ecaaInstructorApproval = ecaaInstructorApprovalRaw === "true"
+
+  const ecaaApprovalNumber = ecaaInstructorApproval
+    ? sanitizeInput((formData.get("ecaaApprovalNumber") as string | null)?.trim() || "")
+    : null
+  const qualifications = !ecaaInstructorApproval
+    ? sanitizeInput((formData.get("qualifications") as string | null)?.trim() || "")
+    : null
+
+  // Handle file uploads
+  const ecaaApprovalFile = formData.get("ecaaApprovalFile") as File | null
+  const trainingOrderFile = formData.get("trainingOrderFile") as File | null
+
+  if (!classroomId || !startTimeRaw || !endTimeRaw || !purpose || !instructorName || !trainingOrder || !department) {
+    throw new Error("All fields are required")
+  }
+
+  if (isBulkBooking && selectedDates.length === 0) {
+    throw new Error("Please select at least one date for bulk booking")
+  }
+
+  if (!trainingOrderFile) {
+    throw new Error("Training order PDF file is required")
+  }
+
+  if (ecaaInstructorApproval && !ecaaApprovalFile) {
+    throw new Error("ECAA approval PDF file is required when you have ECAA instructor approval")
+  }
+
+  if (ecaaInstructorApproval && !ecaaApprovalNumber) {
+    throw new Error("ECAA approval number is required")
+  }
+
+  if (!ecaaInstructorApproval && !qualifications) {
+    throw new Error("Qualifications are required if you don't have ECAA instructor approval")
+  }
+
+  // Validate file types and sizes
+  if (ecaaApprovalFile) {
+    if (ecaaApprovalFile.type !== "application/pdf") {
+      throw new Error("ECAA approval file must be a PDF")
     }
-
-    // Get the actual user from database using email
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    })
-
-    if (!user) {
-      throw new Error("User not found in database")
-    }
-
-    const classroomId = sanitizeInput((formData.get("classroomId") as string | null)?.trim() || "")
-    const startTimeRaw = formData.get("startTime") as string | null
-    const endTimeRaw = formData.get("endTime") as string | null
-    const purpose = sanitizeInput((formData.get("purpose") as string | null)?.trim() || "")
-    const instructorName = sanitizeInput((formData.get("instructorName") as string | null)?.trim() || "")
-    const trainingOrder = sanitizeInput((formData.get("trainingOrder") as string | null)?.trim() || "")
-    const courseReference = sanitizeInput((formData.get("courseReference") as string | null)?.trim() || "")
-    const department = sanitizeInput((formData.get("department") as string | null)?.trim() || "")
-    const participants = Number.parseInt((formData.get("participants") as string | null) || "0", 10)
-    const ecaaInstructorApprovalRaw = formData.get("ecaaInstructorApproval") as string | null
-
-    // Handle bulk booking
-    const isBulkBooking = formData.get("isBulkBooking") === "true"
-    const selectedDates = formData.getAll("selectedDates") as string[]
-
-    // Require explicit ECAA choice: must be "true" or "false"
-    if (ecaaInstructorApprovalRaw !== "true" && ecaaInstructorApprovalRaw !== "false") {
-      throw new Error("Please select your ECAA instructor approval status")
-    }
-    const ecaaInstructorApproval = ecaaInstructorApprovalRaw === "true"
-
-    const ecaaApprovalNumber = ecaaInstructorApproval
-      ? sanitizeInput((formData.get("ecaaApprovalNumber") as string | null)?.trim() || "")
-      : null
-    const qualifications = !ecaaInstructorApproval
-      ? sanitizeInput((formData.get("qualifications") as string | null)?.trim() || "")
-      : null
-
-    // Handle file uploads
-    const ecaaApprovalFile = formData.get("ecaaApprovalFile") as File | null
-    const trainingOrderFile = formData.get("trainingOrderFile") as File | null
-
-    if (!classroomId || !startTimeRaw || !endTimeRaw || !purpose || !instructorName || !trainingOrder || !department) {
-      throw new Error("All fields are required")
-    }
-
-    if (isBulkBooking && selectedDates.length === 0) {
-      throw new Error("Please select at least one date for bulk booking")
-    }
-
-    if (!trainingOrderFile) {
-      throw new Error("Training order PDF file is required")
-    }
-
-    if (ecaaInstructorApproval && !ecaaApprovalFile) {
-      throw new Error("ECAA approval PDF file is required when you have ECAA instructor approval")
-    }
-
-    if (ecaaInstructorApproval && !ecaaApprovalNumber) {
-      throw new Error("ECAA approval number is required")
-    }
-
-    if (!ecaaInstructorApproval && !qualifications) {
-      throw new Error("Qualifications are required if you don't have ECAA instructor approval")
-    }
-
-    // Validate file types and sizes
-    if (ecaaApprovalFile) {
-      if (ecaaApprovalFile.type !== "application/pdf") {
-        throw new Error("ECAA approval file must be a PDF")
-      }
-      if (ecaaApprovalFile.size > 10 * 1024 * 1024) {
-        // 10MB
-        throw new Error("ECAA approval file must be less than 10MB")
-      }
-    }
-
-    if (trainingOrderFile.type !== "application/pdf") {
-      throw new Error("Training order file must be a PDF")
-    }
-    if (trainingOrderFile.size > 10 * 1024 * 1024) {
+    if (ecaaApprovalFile.size > 10 * 1024 * 1024) {
       // 10MB
-      throw new Error("Training order file must be less than 10MB")
+      throw new Error("ECAA approval file must be less than 10MB")
     }
+  }
 
-    // Validate department
-    const validDepartments = [
-      "Cockpit Training",
-      "Cabin Crew",
-      "Station",
-      "OCC",
-      "Compliance",
-      "Safety",
-      "Security",
-      "Maintenance",
-      "Planning & Engineering",
-      "HR & Financial",
-      "Commercial & Planning",
-      "IT",
-      "Meetings",
-    ]
+  if (trainingOrderFile.type !== "application/pdf") {
+    throw new Error("Training order file must be a PDF")
+  }
+  if (trainingOrderFile.size > 10 * 1024 * 1024) {
+    // 10MB
+    throw new Error("Training order file must be less than 10MB")
+  }
 
-    if (!validDepartments.includes(department)) {
-      throw new Error("Please select a valid department")
-    }
+  // Validate department
+  const validDepartments = [
+    "Cockpit Training",
+    "Cabin Crew",
+    "Station",
+    "OCC",
+    "Compliance",
+    "Safety",
+    "Security",
+    "Maintenance",
+    "Planning & Engineering",
+    "HR & Financial",
+    "Commercial & Planning",
+    "IT",
+    "Meetings",
+  ]
 
-    const startTime = new Date(startTimeRaw)
-    const endTime = new Date(endTimeRaw)
+  if (!validDepartments.includes(department)) {
+    throw new Error("Please select a valid department")
+  }
 
-    if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
-      throw new Error("Invalid date/time provided")
-    }
+  const startTime = new Date(startTimeRaw)
+  const endTime = new Date(endTimeRaw)
 
-    if (startTime >= endTime) {
-      throw new Error("End time must be after start time")
-    }
+  if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
+    throw new Error("Invalid date/time provided")
+  }
 
-    // Only check for past time if it's NOT a bulk booking
-    if (!isBulkBooking && startTime < new Date()) {
-      throw new Error("Cannot book time in the past")
-    }
+  if (startTime >= endTime) {
+    throw new Error("End time must be after start time")
+  }
 
-    if (participants < 1) {
-      throw new Error("Number of participants must be at least 1")
-    }
+  // Only check for past time if it's NOT a bulk booking
+  if (!isBulkBooking && startTime < new Date()) {
+    throw new Error("Cannot book time in the past")
+  }
 
-    // Check classroom exists and capacity
-    const classroom = await prisma.classroom.findUnique({
-      where: { id: classroomId },
-    })
+  if (participants < 1) {
+    throw new Error("Number of participants must be at least 1")
+  }
 
-    if (!classroom) {
-      throw new Error("Invalid classroom selection")
-    }
+  // Check classroom exists and capacity
+  const classroom = await prisma.classroom.findUnique({
+    where: { id: classroomId },
+  })
 
-    if (participants > classroom.capacity) {
-      throw new Error(`This classroom can only accommodate ${classroom.capacity} participants`)
-    }
+  if (!classroom) {
+    throw new Error("Invalid classroom selection")
+  }
 
-    // Save uploaded files
-    const uploadDir = join(process.cwd(), "uploads", "bookings")
-    await mkdir(uploadDir, { recursive: true })
+  if (participants > classroom.capacity) {
+    throw new Error(`This classroom can only accommodate ${classroom.capacity} participants`)
+  }
 
-    let ecaaApprovalFilePath: string | null = null
-    let trainingOrderFilePath: string | null = null
+  // Save uploaded files
+  const uploadDir = join(process.cwd(), "uploads", "bookings")
+  await mkdir(uploadDir, { recursive: true })
 
-    if (ecaaApprovalFile) {
-      const ecaaFileName = `ecaa-${user.id}-${Date.now()}.pdf`
-      ecaaApprovalFilePath = join(uploadDir, ecaaFileName)
-      const ecaaBuffer = Buffer.from(await ecaaApprovalFile.arrayBuffer())
-      await writeFile(ecaaApprovalFilePath, ecaaBuffer)
-      ecaaApprovalFilePath = `uploads/bookings/${ecaaFileName}`
-    }
+  let ecaaApprovalFilePath: string | null = null
+  let trainingOrderFilePath: string | null = null
 
-    const trainingFileName = `training-${user.id}-${Date.now()}.pdf`
-    trainingOrderFilePath = join(uploadDir, trainingFileName)
-    const trainingBuffer = Buffer.from(await trainingOrderFile.arrayBuffer())
-    await writeFile(trainingOrderFilePath, trainingBuffer)
-    trainingOrderFilePath = `uploads/bookings/${trainingFileName}`
+  if (ecaaApprovalFile) {
+    const ecaaFileName = `ecaa-${user.id}-${Date.now()}.pdf`
+    ecaaApprovalFilePath = join(uploadDir, ecaaFileName)
+    const ecaaBuffer = Buffer.from(await ecaaApprovalFile.arrayBuffer())
+    await writeFile(ecaaApprovalFilePath, ecaaBuffer)
+    ecaaApprovalFilePath = `uploads/bookings/${ecaaFileName}`
+  }
 
+  const trainingFileName = `training-${user.id}-${Date.now()}.pdf`
+  trainingOrderFilePath = join(uploadDir, trainingFileName)
+  const trainingBuffer = Buffer.from(await trainingOrderFile.arrayBuffer())
+  await writeFile(trainingOrderFilePath, trainingBuffer)
+  trainingOrderFilePath = `uploads/bookings/${trainingFileName}`
+
+  try {
     if (isBulkBooking && selectedDates.length > 0) {
       // Handle bulk booking - create ONE booking with multiple dates stored in purpose
       const bulkBookingId = `bulk-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -395,27 +395,27 @@ export async function createBooking(formData: FormData) {
     }
   } catch (error) {
     console.error("Database error:", error)
-    throw new Error(`Failed to create booking: ${error instanceof Error ? error.message : "Unknown error"}`)
+    throw new Error("Failed to create booking. Please try again.")
   }
 }
 
 export async function updateBookingStatus(bookingId: string, status: "APPROVED" | "REJECTED") {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.user?.email) {
+    throw new Error("Unauthorized")
+  }
+
+  // Get the actual user from database using email
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+  })
+
+  if (!user || user.role !== "ADMIN") {
+    throw new Error("Unauthorized - Admin access required")
+  }
+
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user?.email) {
-      throw new Error("Unauthorized")
-    }
-
-    // Get the actual user from database using email
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    })
-
-    if (!user || user.role !== "ADMIN") {
-      throw new Error("Unauthorized - Admin access required")
-    }
-
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
     })
@@ -453,47 +453,47 @@ export async function updateBookingStatus(bookingId: string, status: "APPROVED" 
     return { success: true }
   } catch (error) {
     console.error("Database error:", error)
-    throw new Error(`Failed to update booking status: ${error instanceof Error ? error.message : "Unknown error"}`)
+    throw new Error("Failed to update booking status")
   }
 }
 
 export async function cancelBooking(bookingId: string) {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.user?.email) {
+    throw new Error("Unauthorized - No session found")
+  }
+
+  // Get the actual user from database using email
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+  })
+
+  if (!user) {
+    throw new Error("User not found in database")
+  }
+
+  // Get the booking with file paths
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+  })
+
+  if (!booking) {
+    throw new Error("Booking not found")
+  }
+
+  // Check if the user owns this booking or is an admin
+  if (booking.userId !== user.id && user.role !== "ADMIN") {
+    throw new Error("Unauthorized - You can only cancel your own bookings")
+  }
+
+  // Check if the booking is already approved and in the past
+  const now = new Date()
+  if (booking.status === "APPROVED" && booking.startTime < now) {
+    throw new Error("Cannot cancel a booking that has already started or ended")
+  }
+
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user?.email) {
-      throw new Error("Unauthorized - No session found")
-    }
-
-    // Get the actual user from database using email
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    })
-
-    if (!user) {
-      throw new Error("User not found in database")
-    }
-
-    // Get the booking with file paths
-    const booking = await prisma.booking.findUnique({
-      where: { id: bookingId },
-    })
-
-    if (!booking) {
-      throw new Error("Booking not found")
-    }
-
-    // Check if the user owns this booking or is an admin
-    if (booking.userId !== user.id && user.role !== "ADMIN") {
-      throw new Error("Unauthorized - You can only cancel your own bookings")
-    }
-
-    // Check if the booking is already approved and in the past
-    const now = new Date()
-    if (booking.status === "APPROVED" && booking.startTime < now) {
-      throw new Error("Cannot cancel a booking that has already started or ended")
-    }
-
     // Delete the booking
     await prisma.booking.delete({
       where: { id: bookingId },
@@ -512,27 +512,27 @@ export async function cancelBooking(bookingId: string) {
     return { success: true, message: "Booking cancelled successfully" }
   } catch (error) {
     console.error("Database error:", error)
-    throw new Error(`Failed to cancel booking: ${error instanceof Error ? error.message : "Unknown error"}`)
+    throw new Error("Failed to cancel booking. Please try again.")
   }
 }
 
 export async function deleteBooking(bookingId: string) {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.user?.email) {
+    throw new Error("Unauthorized")
+  }
+
+  // Get the actual user from database using email
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+  })
+
+  if (!user || user.role !== "ADMIN") {
+    throw new Error("Unauthorized - Admin access required")
+  }
+
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user?.email) {
-      throw new Error("Unauthorized")
-    }
-
-    // Get the actual user from database using email
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    })
-
-    if (!user || user.role !== "ADMIN") {
-      throw new Error("Unauthorized - Admin access required")
-    }
-
     // Get the booking with file paths before deleting
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
@@ -560,28 +560,28 @@ export async function deleteBooking(bookingId: string) {
     return { success: true }
   } catch (error) {
     console.error("Database error:", error)
-    throw new Error(`Failed to delete booking: ${error instanceof Error ? error.message : "Unknown error"}`)
+    throw new Error("Failed to delete booking")
   }
 }
 
 // New function to delete bulk bookings
 export async function deleteBulkBooking(bulkBookingId: string) {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.user?.email) {
+    throw new Error("Unauthorized")
+  }
+
+  // Get the actual user from database using email
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+  })
+
+  if (!user || user.role !== "ADMIN") {
+    throw new Error("Unauthorized - Admin access required")
+  }
+
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user?.email) {
-      throw new Error("Unauthorized")
-    }
-
-    // Get the actual user from database using email
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    })
-
-    if (!user || user.role !== "ADMIN") {
-      throw new Error("Unauthorized - Admin access required")
-    }
-
     // Get all bookings in the bulk booking with file paths
     const bookings = await prisma.booking.findMany({
       where: { bulkBookingId },
@@ -612,6 +612,6 @@ export async function deleteBulkBooking(bulkBookingId: string) {
     return { success: true, message: `Deleted ${bookings.length} bookings from bulk booking` }
   } catch (error) {
     console.error("Database error:", error)
-    throw new Error(`Failed to delete bulk booking: ${error instanceof Error ? error.message : "Unknown error"}`)
+    throw new Error("Failed to delete bulk booking")
   }
 }

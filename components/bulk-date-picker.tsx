@@ -14,18 +14,10 @@ interface BulkDatePickerProps {
 }
 
 export function BulkDatePicker({ selectedDates, onSelectedDatesChange }: BulkDatePickerProps) {
-  const [isOpen, setIsOpen] = useState<boolean>(false)
+  const [isOpen, setIsOpen] = useState(false)
 
-  // Safely convert string dates to Date objects for calendar
-  const selectedCalendarDates = selectedDates.map((dateStr) => {
-    try {
-      const dateObj = new Date(dateStr)
-      return isNaN(dateObj.getTime()) ? new Date() : dateObj
-    } catch (error) {
-      console.warn("Invalid date string:", dateStr)
-      return new Date()
-    }
-  })
+  // Convert string dates to Date objects for calendar
+  const selectedCalendarDates = selectedDates.map((dateStr) => new Date(dateStr))
 
   const handleDateSelect = (dates: Date[] | undefined) => {
     if (dates) {

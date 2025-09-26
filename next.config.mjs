@@ -1,14 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ['bcryptjs'],
-  },
-  productionBrowserSourceMaps: true,
-  logging: {
-    fetches: {
-      fullUrl: true,
-    },
-  },
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -18,17 +9,11 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  async headers() {
-    return [
-      {
-        source: '/api/:path*',
-        headers: [
-          { key: 'Access-Control-Allow-Origin', value: '*' },
-          { key: 'Access-Control-Allow-Methods', value: 'GET, POST, PUT, DELETE, OPTIONS' },
-          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
-        ],
-      },
-    ]
+  compiler: {
+    // Remove all console.* in production bundles except errors.
+    // Set to true to remove everything including errors:
+    // removeConsole: true,
+    removeConsole: { exclude: ['error'] },
   },
 }
 
