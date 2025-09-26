@@ -1,458 +1,321 @@
 "use server"
 
-import { prisma } from "@/lib/db"
+import { revalidatePath } from "next/cache"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { revalidatePath } from "next/cache"
-import { writeFile, mkdir, unlink } from "fs/promises"
+import { sql } from "@vercel/postgres"
+import { writeFile, mkdir } from "fs/promises"
 import { join } from "path"
-import { sanitizeInput } from "@/lib/security"
 
-// Helper function to delete files
-async function deleteFile(filePath: string) {
-  try {
-    const fullPath = join(process.cwd(), filePath)
-    await unlink(fullPath)
-    console.log(`Deleted file: ${filePath}`)
-  } catch (error) {
-    console.error(`Failed to delete file ${filePath}:`, error)
-    // Don't throw error - file might already be deleted or not exist
-  }
-}
-
-// Helper function to extract dates from bulk booking purpose
-function extractDatesFromBulkPurpose(purpose: string): string[] {
-  if (!purpose.startsWith("BULK_BOOKING:")) {
-    return []
-  }
-
-  const parts = purpose.split(":")
-  if (parts.length < 3) {
-    return []
-  }
-
-  return parts[1].split(",")
-}
-
-// Helper function to check if two time ranges overlap
-function timeRangesOverlap(start1: Date, end1: Date, start2: Date, end2: Date): boolean {
-  return start1 < end2 && start2 < end1
-}
-
-// Helper function to check for booking conflicts
-async function checkBookingConflict(classroomId: string, startTime: Date, endTime: Date, excludeBookingId?: string) {
-  const whereClause: any = {
-    classroomId,
-    status: { in: ["PENDING", "APPROVED"] },
-  }
-
-  // Exclude a specific booking (useful for updates)
-  if (excludeBookingId) {
-    whereClause.id = { not: excludeBookingId }
-  }
-
-  const existingBookings = await prisma.booking.findMany({
-    where: whereClause,
-    include: {
-      user: {
-        select: {
-          name: true,
-          email: true,
-        },
-      },
-    },
+// Enhanced error logging function
+function logError(error: any, context: string) {
+  console.error(`[${context}] Error:`, {
+    message: error.message,
+    stack: error.stack,
+    timestamp: new Date().toISOString(),
+    context,
   })
+}
 
-  // Check each existing booking for conflicts
-  for (const booking of existingBookings) {
-    if (booking.purpose.startsWith("BULK_BOOKING:")) {
-      // Handle bulk booking conflicts
-      const bulkDates = extractDatesFromBulkPurpose(booking.purpose)
-      const newBookingDateStr = startTime.toISOString().split("T")[0] // Get YYYY-MM-DD format
+// Helper function to check if time ranges overlap
+function timeRangesOverlap(start1: string, end1: string, start2: string, end2: string): boolean {
+  const startTime1 = new Date(`2000-01-01 ${start1}`)
+  const endTime1 = new Date(`2000-01-01 ${end1}`)
+  const startTime2 = new Date(`2000-01-01 ${start2}`)
+  const endTime2 = new Date(`2000-01-01 ${end2}`)
 
-      // Check if the new booking date matches any of the bulk booking dates
-      for (const bulkDateStr of bulkDates) {
-        const bulkDate = new Date(bulkDateStr)
-        const bulkDateFormatted = bulkDate.toISOString().split("T")[0]
+  return startTime1 < endTime2 && startTime2 < endTime1
+}
 
-        if (newBookingDateStr === bulkDateFormatted) {
-          // Same date, now check time overlap
-          // Create full datetime objects for the bulk booking on this specific date
-          const bulkStartTime = new Date(`${bulkDateStr}T${booking.startTime.toTimeString().split(" ")[0]}`)
-          const bulkEndTime = new Date(`${bulkDateStr}T${booking.endTime.toTimeString().split(" ")[0]}`)
+// Enhanced conflict detection function
+async function checkBookingConflict(
+  classroomId: string,
+  date: string,
+  startTime: string,
+  endTime: string,
+  excludeBookingId?: string,
+): Promise<{ hasConflict: boolean; conflictDetails?: string }> {
+  try {
+    console.log("Checking conflicts for:", { classroomId, date, startTime, endTime, excludeBookingId })
 
-          if (timeRangesOverlap(startTime, endTime, bulkStartTime, bulkEndTime)) {
+    // Format the date consistently
+    const bookingDate = new Date(date).toISOString().split("T")[0]
+
+    // Get all bookings for the same classroom and date
+    const { rows: existingBookings } = await sql`
+      SELECT id, date, start_time, end_time, purpose, status
+      FROM bookings 
+      WHERE classroom_id = ${classroomId}
+      AND status IN ('PENDING', 'APPROVED')
+      ${excludeBookingId ? sql`AND id != ${excludeBookingId}` : sql``}
+    `
+
+    console.log("Found existing bookings:", existingBookings.length)
+
+    for (const booking of existingBookings) {
+      // Check if it's a bulk booking
+      if (booking.purpose && booking.purpose.includes("BULK_BOOKING:")) {
+        // Extract dates from bulk booking purpose
+        const dateMatch = booking.purpose.match(/BULK_BOOKING:(.+?)(?:\s|$)/)
+        if (dateMatch) {
+          const bulkDates = dateMatch[1].split(",").map((d) => d.trim())
+          console.log("Bulk booking dates:", bulkDates)
+
+          // Check if any bulk booking date matches our booking date
+          for (const bulkDate of bulkDates) {
+            const bulkBookingDate = new Date(bulkDate).toISOString().split("T")[0]
+            if (bulkBookingDate === bookingDate) {
+              // Check time overlap
+              if (timeRangesOverlap(startTime, endTime, booking.start_time, booking.end_time)) {
+                return {
+                  hasConflict: true,
+                  conflictDetails: `Conflicts with bulk booking on ${bulkDate} from ${booking.start_time} to ${booking.end_time} (Status: ${booking.status})`,
+                }
+              }
+            }
+          }
+        }
+      } else {
+        // Regular booking - check date and time
+        const existingBookingDate = new Date(booking.date).toISOString().split("T")[0]
+        if (existingBookingDate === bookingDate) {
+          // Check time overlap
+          if (timeRangesOverlap(startTime, endTime, booking.start_time, booking.end_time)) {
             return {
-              ...booking,
-              conflictDate: bulkDateStr,
-              conflictStartTime: bulkStartTime,
-              conflictEndTime: bulkEndTime,
-              isBulkBooking: true,
+              hasConflict: true,
+              conflictDetails: `Conflicts with existing booking on ${booking.date} from ${booking.start_time} to ${booking.end_time} (Status: ${booking.status})`,
             }
           }
         }
       }
-    } else {
-      // Handle regular booking conflicts
-      if (timeRangesOverlap(startTime, endTime, booking.startTime, booking.endTime)) {
-        return {
-          ...booking,
-          conflictDate: booking.startTime.toISOString().split("T")[0],
-          conflictStartTime: booking.startTime,
-          conflictEndTime: booking.endTime,
-          isBulkBooking: false,
-        }
-      }
     }
-  }
 
-  return null
+    return { hasConflict: false }
+  } catch (error) {
+    logError(error, "checkBookingConflict")
+    throw new Error(`Conflict check failed: ${error instanceof Error ? error.message : "Unknown error"}`)
+  }
 }
 
 export async function createBooking(formData: FormData) {
   try {
+    console.log("Creating booking with form data:", Object.fromEntries(formData.entries()))
+
     const session = await getServerSession(authOptions)
-
     if (!session?.user?.email) {
-      throw new Error("Unauthorized - No session found")
+      throw new Error("Authentication required - no valid session found")
     }
 
-    // Get the actual user from database using email
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    })
+    // Get user from database
+    const { rows: users } = await sql`
+      SELECT id, email, name, role FROM users WHERE email = ${session.user.email}
+    `
 
-    if (!user) {
-      throw new Error("User not found in database")
+    if (users.length === 0) {
+      throw new Error(`User not found in database: ${session.user.email}`)
     }
 
-    const classroomId = sanitizeInput((formData.get("classroomId") as string | null)?.trim() || "")
-    const startTimeRaw = formData.get("startTime") as string | null
-    const endTimeRaw = formData.get("endTime") as string | null
-    const purpose = sanitizeInput((formData.get("purpose") as string | null)?.trim() || "")
-    const instructorName = sanitizeInput((formData.get("instructorName") as string | null)?.trim() || "")
-    const trainingOrder = sanitizeInput((formData.get("trainingOrder") as string | null)?.trim() || "")
-    const courseReference = sanitizeInput((formData.get("courseReference") as string | null)?.trim() || "")
-    const department = sanitizeInput((formData.get("department") as string | null)?.trim() || "")
-    const participants = Number.parseInt((formData.get("participants") as string | null) || "0", 10)
-    const ecaaInstructorApprovalRaw = formData.get("ecaaInstructorApproval") as string | null
+    const user = users[0]
+    console.log("Found user:", { id: user.id, email: user.email, role: user.role })
 
-    // Handle bulk booking
-    const isBulkBooking = formData.get("isBulkBooking") === "true"
-    const selectedDates = formData.getAll("selectedDates") as string[]
+    const classroomId = formData.get("classroomId") as string
+    const date = formData.get("date") as string
+    const startTime = formData.get("startTime") as string
+    const endTime = formData.get("endTime") as string
+    const purpose = formData.get("purpose") as string
+    const participants = Number.parseInt(formData.get("participants") as string)
+    const department = formData.get("department") as string
 
-    // Require explicit ECAA choice: must be "true" or "false"
-    if (ecaaInstructorApprovalRaw !== "true" && ecaaInstructorApprovalRaw !== "false") {
-      throw new Error("Please select your ECAA instructor approval status")
-    }
-    const ecaaInstructorApproval = ecaaInstructorApprovalRaw === "true"
-
-    const ecaaApprovalNumber = ecaaInstructorApproval
-      ? sanitizeInput((formData.get("ecaaApprovalNumber") as string | null)?.trim() || "")
-      : null
-    const qualifications = !ecaaInstructorApproval
-      ? sanitizeInput((formData.get("qualifications") as string | null)?.trim() || "")
-      : null
-
-    // Handle file uploads
-    const ecaaApprovalFile = formData.get("ecaaApprovalFile") as File | null
-    const trainingOrderFile = formData.get("trainingOrderFile") as File | null
-
-    if (!classroomId || !startTimeRaw || !endTimeRaw || !purpose || !instructorName || !trainingOrder || !department) {
-      throw new Error("All fields are required")
+    // Validate required fields
+    if (!classroomId || !date || !startTime || !endTime || !purpose || !participants || !department) {
+      throw new Error("Missing required fields")
     }
 
-    if (isBulkBooking && selectedDates.length === 0) {
-      throw new Error("Please select at least one date for bulk booking")
+    // Check for conflicts
+    const conflictCheck = await checkBookingConflict(classroomId, date, startTime, endTime)
+    if (conflictCheck.hasConflict) {
+      throw new Error(`Booking conflict detected: ${conflictCheck.conflictDetails}`)
     }
 
-    if (!trainingOrderFile) {
-      throw new Error("Training order PDF file is required")
-    }
+    // Handle file upload if present
+    let fileName = null
+    const file = formData.get("file") as File
+    if (file && file.size > 0) {
+      console.log("Processing file upload:", { name: file.name, size: file.size })
 
-    if (ecaaInstructorApproval && !ecaaApprovalFile) {
-      throw new Error("ECAA approval PDF file is required when you have ECAA instructor approval")
-    }
-
-    if (ecaaInstructorApproval && !ecaaApprovalNumber) {
-      throw new Error("ECAA approval number is required")
-    }
-
-    if (!ecaaInstructorApproval && !qualifications) {
-      throw new Error("Qualifications are required if you don't have ECAA instructor approval")
-    }
-
-    // Validate file types and sizes
-    if (ecaaApprovalFile) {
-      if (ecaaApprovalFile.type !== "application/pdf") {
-        throw new Error("ECAA approval file must be a PDF")
-      }
-      if (ecaaApprovalFile.size > 10 * 1024 * 1024) {
-        // 10MB
-        throw new Error("ECAA approval file must be less than 10MB")
-      }
-    }
-
-    if (trainingOrderFile.type !== "application/pdf") {
-      throw new Error("Training order file must be a PDF")
-    }
-    if (trainingOrderFile.size > 10 * 1024 * 1024) {
-      // 10MB
-      throw new Error("Training order file must be less than 10MB")
-    }
-
-    // Validate department
-    const validDepartments = [
-      "Cockpit Training",
-      "Cabin Crew",
-      "Station",
-      "OCC",
-      "Compliance",
-      "Safety",
-      "Security",
-      "Maintenance",
-      "Planning & Engineering",
-      "HR & Financial",
-      "Commercial & Planning",
-      "IT",
-      "Meetings",
-    ]
-
-    if (!validDepartments.includes(department)) {
-      throw new Error("Please select a valid department")
-    }
-
-    const startTime = new Date(startTimeRaw)
-    const endTime = new Date(endTimeRaw)
-
-    if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
-      throw new Error("Invalid date/time provided")
-    }
-
-    if (startTime >= endTime) {
-      throw new Error("End time must be after start time")
-    }
-
-    // Only check for past time if it's NOT a bulk booking
-    if (!isBulkBooking && startTime < new Date()) {
-      throw new Error("Cannot book time in the past")
-    }
-
-    if (participants < 1) {
-      throw new Error("Number of participants must be at least 1")
-    }
-
-    // Check classroom exists and capacity
-    const classroom = await prisma.classroom.findUnique({
-      where: { id: classroomId },
-    })
-
-    if (!classroom) {
-      throw new Error("Invalid classroom selection")
-    }
-
-    if (participants > classroom.capacity) {
-      throw new Error(`This classroom can only accommodate ${classroom.capacity} participants`)
-    }
-
-    // Save uploaded files
-    const uploadDir = join(process.cwd(), "uploads", "bookings")
-    await mkdir(uploadDir, { recursive: true })
-
-    let ecaaApprovalFilePath: string | null = null
-    let trainingOrderFilePath: string | null = null
-
-    if (ecaaApprovalFile) {
-      const ecaaFileName = `ecaa-${user.id}-${Date.now()}.pdf`
-      ecaaApprovalFilePath = join(uploadDir, ecaaFileName)
-      const ecaaBuffer = Buffer.from(await ecaaApprovalFile.arrayBuffer())
-      await writeFile(ecaaApprovalFilePath, ecaaBuffer)
-      ecaaApprovalFilePath = `uploads/bookings/${ecaaFileName}`
-    }
-
-    const trainingFileName = `training-${user.id}-${Date.now()}.pdf`
-    trainingOrderFilePath = join(uploadDir, trainingFileName)
-    const trainingBuffer = Buffer.from(await trainingOrderFile.arrayBuffer())
-    await writeFile(trainingOrderFilePath, trainingBuffer)
-    trainingOrderFilePath = `uploads/bookings/${trainingFileName}`
-
-    if (isBulkBooking && selectedDates.length > 0) {
-      // Handle bulk booking - create ONE booking with multiple dates stored in purpose
-      const bulkBookingId = `bulk-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-
-      // Check for conflicts for each date
-      for (const dateStr of selectedDates) {
-        const bookingStartTime = new Date(`${dateStr}T${startTime.toTimeString().split(" ")[0]}`)
-        const bookingEndTime = new Date(`${dateStr}T${endTime.toTimeString().split(" ")[0]}`)
-
-        // Enhanced conflict detection
-        const conflict = await checkBookingConflict(classroomId, bookingStartTime, bookingEndTime)
-
-        if (conflict) {
-          const conflictDate = new Date(conflict.conflictDate).toLocaleDateString()
-          const conflictStartTime = conflict.conflictStartTime.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-          const conflictEndTime = conflict.conflictEndTime.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-
-          if (conflict.isBulkBooking) {
-            throw new Error(
-              `Time slot conflicts with existing bulk booking on ${conflictDate} from ${conflictStartTime} to ${conflictEndTime}`,
-            )
-          } else {
-            throw new Error(
-              `Time slot conflicts with existing booking on ${conflictDate} from ${conflictStartTime} to ${conflictEndTime}`,
-            )
-          }
-        }
+      if (file.size > 10 * 1024 * 1024) {
+        // 10MB limit
+        throw new Error("File size exceeds 10MB limit")
       }
 
-      // Create a single booking record representing the bulk booking
-      // Store all selected dates in the purpose field with a special format
-      const bulkPurpose = `BULK_BOOKING:${selectedDates.join(",")}:${purpose}`
+      const bytes = await file.arrayBuffer()
+      const buffer = Buffer.from(bytes)
 
-      // Use the first date for the main booking record's start/end times
-      const firstDate = selectedDates[0]
-      const firstBookingStartTime = new Date(`${firstDate}T${startTime.toTimeString().split(" ")[0]}`)
-      const firstBookingEndTime = new Date(`${firstDate}T${endTime.toTimeString().split(" ")[0]}`)
-
-      await prisma.booking.create({
-        data: {
-          userId: user.id,
-          classroomId,
-          startTime: firstBookingStartTime,
-          endTime: firstBookingEndTime,
-          purpose: bulkPurpose,
-          instructorName,
-          trainingOrder,
-          courseReference: courseReference || null,
-          department,
-          participants,
-          ecaaInstructorApproval,
-          ecaaApprovalNumber,
-          qualifications,
-          ecaaApprovalFile: ecaaApprovalFilePath,
-          trainingOrderFile: trainingOrderFilePath,
-          bulkBookingId,
-        },
-      })
-
-      revalidatePath("/dashboard")
-      return {
-        success: true,
-        message: `Bulk booking request for ${selectedDates.length} dates submitted successfully!`,
-      }
-    } else {
-      // Single booking - Enhanced conflict detection
-      const conflict = await checkBookingConflict(classroomId, startTime, endTime)
-
-      if (conflict) {
-        // Provide more detailed conflict information
-        const conflictDate = new Date(conflict.conflictDate).toLocaleDateString()
-        const conflictStartTime = conflict.conflictStartTime.toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-        const conflictEndTime = conflict.conflictEndTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-
-        if (conflict.isBulkBooking) {
-          throw new Error(
-            `Time slot conflicts with existing bulk booking on ${conflictDate} from ${conflictStartTime} to ${conflictEndTime}`,
-          )
-        } else {
-          throw new Error(
-            `Time slot conflicts with existing booking on ${conflictDate} from ${conflictStartTime} to ${conflictEndTime}`,
-          )
-        }
+      // Create uploads directory if it doesn't exist
+      const uploadsDir = join(process.cwd(), "public", "uploads")
+      try {
+        await mkdir(uploadsDir, { recursive: true })
+      } catch (error) {
+        console.log("Uploads directory already exists or created")
       }
 
-      await prisma.booking.create({
-        data: {
-          userId: user.id,
-          classroomId,
-          startTime,
-          endTime,
-          purpose,
-          instructorName,
-          trainingOrder,
-          courseReference: courseReference || null,
-          department,
-          participants,
-          ecaaInstructorApproval,
-          ecaaApprovalNumber,
-          qualifications,
-          ecaaApprovalFile: ecaaApprovalFilePath,
-          trainingOrderFile: trainingOrderFilePath,
-        },
-      })
+      // Generate unique filename
+      const timestamp = Date.now()
+      const originalName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_")
+      fileName = `${timestamp}_${originalName}`
+      const filePath = join(uploadsDir, fileName)
 
-      revalidatePath("/dashboard")
-      return { success: true, message: "Booking request submitted successfully!" }
+      await writeFile(filePath, buffer)
+      console.log("File saved:", filePath)
     }
+
+    // Create the booking
+    const { rows } = await sql`
+      INSERT INTO bookings (
+        user_id, classroom_id, date, start_time, end_time, 
+        purpose, participants, department, status, file_path
+      )
+      VALUES (
+        ${user.id}, ${classroomId}, ${date}, ${startTime}, ${endTime},
+        ${purpose}, ${participants}, ${department}, 'PENDING', ${fileName}
+      )
+      RETURNING id
+    `
+
+    console.log("Booking created successfully:", rows[0])
+    revalidatePath("/dashboard")
+    revalidatePath("/admin")
+
+    return { success: true, message: "Booking created successfully!" }
   } catch (error) {
-    console.error("Database error:", error)
+    logError(error, "createBooking")
     throw new Error(`Failed to create booking: ${error instanceof Error ? error.message : "Unknown error"}`)
+  }
+}
+
+export async function createBulkBooking(formData: FormData) {
+  try {
+    console.log("Creating bulk booking with form data:", Object.fromEntries(formData.entries()))
+
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.email) {
+      throw new Error("Authentication required - no valid session found")
+    }
+
+    // Get user from database
+    const { rows: users } = await sql`
+      SELECT id, email, name, role FROM users WHERE email = ${session.user.email}
+    `
+
+    if (users.length === 0) {
+      throw new Error(`User not found in database: ${session.user.email}`)
+    }
+
+    const user = users[0]
+
+    const classroomId = formData.get("classroomId") as string
+    const dates = formData.get("dates") as string
+    const startTime = formData.get("startTime") as string
+    const endTime = formData.get("endTime") as string
+    const purpose = formData.get("purpose") as string
+    const participants = Number.parseInt(formData.get("participants") as string)
+    const department = formData.get("department") as string
+
+    if (!classroomId || !dates || !startTime || !endTime || !purpose || !participants || !department) {
+      throw new Error("Missing required fields for bulk booking")
+    }
+
+    const dateList = dates.split(",").map((d) => d.trim())
+    console.log("Processing bulk booking for dates:", dateList)
+
+    // Check for conflicts on each date
+    for (const date of dateList) {
+      const conflictCheck = await checkBookingConflict(classroomId, date, startTime, endTime)
+      if (conflictCheck.hasConflict) {
+        throw new Error(`Booking conflict on ${date}: ${conflictCheck.conflictDetails}`)
+      }
+    }
+
+    // Handle file upload
+    let fileName = null
+    const file = formData.get("file") as File
+    if (file && file.size > 0) {
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error("File size exceeds 10MB limit")
+      }
+
+      const bytes = await file.arrayBuffer()
+      const buffer = Buffer.from(bytes)
+
+      const uploadsDir = join(process.cwd(), "public", "uploads")
+      try {
+        await mkdir(uploadsDir, { recursive: true })
+      } catch (error) {
+        console.log("Uploads directory already exists or created")
+      }
+
+      const timestamp = Date.now()
+      const originalName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_")
+      fileName = `${timestamp}_${originalName}`
+      const filePath = join(uploadsDir, fileName)
+
+      await writeFile(filePath, buffer)
+    }
+
+    // Create bulk booking with special purpose format
+    const bulkPurpose = `BULK_BOOKING:${dates} - ${purpose}`
+
+    const { rows } = await sql`
+      INSERT INTO bookings (
+        user_id, classroom_id, date, start_time, end_time, 
+        purpose, participants, department, status, file_path
+      )
+      VALUES (
+        ${user.id}, ${classroomId}, ${dateList[0]}, ${startTime}, ${endTime},
+        ${bulkPurpose}, ${participants}, ${department}, 'PENDING', ${fileName}
+      )
+      RETURNING id
+    `
+
+    console.log("Bulk booking created successfully:", rows[0])
+    revalidatePath("/dashboard")
+    revalidatePath("/admin")
+
+    return { success: true, message: `Bulk booking created for ${dateList.length} dates!` }
+  } catch (error) {
+    logError(error, "createBulkBooking")
+    throw new Error(`Failed to create bulk booking: ${error instanceof Error ? error.message : "Unknown error"}`)
   }
 }
 
 export async function updateBookingStatus(bookingId: string, status: "APPROVED" | "REJECTED") {
   try {
     const session = await getServerSession(authOptions)
-
     if (!session?.user?.email) {
-      throw new Error("Unauthorized")
+      throw new Error("Authentication required")
     }
 
-    // Get the actual user from database using email
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    })
+    // Get user and verify admin role
+    const { rows: users } = await sql`
+      SELECT id, role FROM users WHERE email = ${session.user.email}
+    `
 
-    if (!user || user.role !== "ADMIN") {
-      throw new Error("Unauthorized - Admin access required")
+    if (users.length === 0 || users[0].role !== "ADMIN") {
+      throw new Error("Admin access required")
     }
 
-    const booking = await prisma.booking.findUnique({
-      where: { id: bookingId },
-    })
-
-    if (!booking) {
-      throw new Error("Booking not found")
-    }
-
-    // If this is a bulk booking, just update the status - don't create individual bookings
-    if (booking.purpose.startsWith("BULK_BOOKING:")) {
-      await prisma.booking.update({
-        where: { id: bookingId },
-        data: { status },
-      })
-
-      // If bulk booking is rejected, delete associated files
-      if (status === "REJECTED") {
-        if (booking.ecaaApprovalFile) {
-          await deleteFile(booking.ecaaApprovalFile)
-        }
-        if (booking.trainingOrderFile) {
-          await deleteFile(booking.trainingOrderFile)
-        }
-      }
-    } else {
-      // Regular booking
-      await prisma.booking.update({
-        where: { id: bookingId },
-        data: { status },
-      })
-    }
+    await sql`
+      UPDATE bookings 
+      SET status = ${status}, updated_at = NOW()
+      WHERE id = ${bookingId}
+    `
 
     revalidatePath("/admin")
     revalidatePath("/dashboard")
-    return { success: true }
+
+    return { success: true, message: `Booking ${status.toLowerCase()} successfully!` }
   } catch (error) {
-    console.error("Database error:", error)
+    logError(error, "updateBookingStatus")
     throw new Error(`Failed to update booking status: ${error instanceof Error ? error.message : "Unknown error"}`)
   }
 }
@@ -460,58 +323,48 @@ export async function updateBookingStatus(bookingId: string, status: "APPROVED" 
 export async function cancelBooking(bookingId: string) {
   try {
     const session = await getServerSession(authOptions)
-
     if (!session?.user?.email) {
-      throw new Error("Unauthorized - No session found")
+      throw new Error("Authentication required")
     }
 
-    // Get the actual user from database using email
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    })
+    // Get user from database
+    const { rows: users } = await sql`
+      SELECT id FROM users WHERE email = ${session.user.email}
+    `
 
-    if (!user) {
-      throw new Error("User not found in database")
+    if (users.length === 0) {
+      throw new Error("User not found")
     }
 
-    // Get the booking with file paths
-    const booking = await prisma.booking.findUnique({
-      where: { id: bookingId },
-    })
+    const user = users[0]
 
-    if (!booking) {
-      throw new Error("Booking not found")
+    // Verify the booking belongs to the user and is pending
+    const { rows: bookings } = await sql`
+      SELECT id, status FROM bookings 
+      WHERE id = ${bookingId} AND user_id = ${user.id}
+    `
+
+    if (bookings.length === 0) {
+      throw new Error("Booking not found or access denied")
     }
 
-    // Check if the user owns this booking or is an admin
-    if (booking.userId !== user.id && user.role !== "ADMIN") {
-      throw new Error("Unauthorized - You can only cancel your own bookings")
+    if (bookings[0].status !== "PENDING") {
+      throw new Error("Only pending bookings can be cancelled")
     }
 
-    // Check if the booking is already approved and in the past
-    const now = new Date()
-    if (booking.status === "APPROVED" && booking.startTime < now) {
-      throw new Error("Cannot cancel a booking that has already started or ended")
-    }
-
-    // Delete the booking
-    await prisma.booking.delete({
-      where: { id: bookingId },
-    })
-
-    // Delete associated files
-    if (booking.ecaaApprovalFile) {
-      await deleteFile(booking.ecaaApprovalFile)
-    }
-    if (booking.trainingOrderFile) {
-      await deleteFile(booking.trainingOrderFile)
-    }
+    // Update booking status to cancelled
+    await sql`
+      UPDATE bookings 
+      SET status = 'CANCELLED', updated_at = NOW()
+      WHERE id = ${bookingId}
+    `
 
     revalidatePath("/dashboard")
     revalidatePath("/admin")
-    return { success: true, message: "Booking cancelled successfully" }
+
+    return { success: true, message: "Booking cancelled successfully!" }
   } catch (error) {
-    console.error("Database error:", error)
+    logError(error, "cancelBooking")
     throw new Error(`Failed to cancel booking: ${error instanceof Error ? error.message : "Unknown error"}`)
   }
 }
@@ -519,99 +372,43 @@ export async function cancelBooking(bookingId: string) {
 export async function deleteBooking(bookingId: string) {
   try {
     const session = await getServerSession(authOptions)
-
     if (!session?.user?.email) {
-      throw new Error("Unauthorized")
+      throw new Error("Authentication required")
     }
 
-    // Get the actual user from database using email
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    })
+    // Get user and verify admin role
+    const { rows: users } = await sql`
+      SELECT id, role FROM users WHERE email = ${session.user.email}
+    `
 
-    if (!user || user.role !== "ADMIN") {
-      throw new Error("Unauthorized - Admin access required")
+    if (users.length === 0 || users[0].role !== "ADMIN") {
+      throw new Error("Admin access required")
     }
 
-    // Get the booking with file paths before deleting
-    const booking = await prisma.booking.findUnique({
-      where: { id: bookingId },
-    })
-
-    if (!booking) {
-      throw new Error("Booking not found")
-    }
+    // Get booking details for file cleanup
+    const { rows: bookings } = await sql`
+      SELECT file_path FROM bookings WHERE id = ${bookingId}
+    `
 
     // Delete the booking
-    await prisma.booking.delete({
-      where: { id: bookingId },
-    })
+    await sql`DELETE FROM bookings WHERE id = ${bookingId}`
 
-    // Delete associated files
-    if (booking.ecaaApprovalFile) {
-      await deleteFile(booking.ecaaApprovalFile)
-    }
-    if (booking.trainingOrderFile) {
-      await deleteFile(booking.trainingOrderFile)
+    // Clean up file if exists
+    if (bookings.length > 0 && bookings[0].file_path) {
+      try {
+        const filePath = join(process.cwd(), "public", "uploads", bookings[0].file_path)
+        await import("fs/promises").then((fs) => fs.unlink(filePath))
+      } catch (fileError) {
+        console.log("File cleanup failed (file may not exist):", fileError)
+      }
     }
 
     revalidatePath("/admin")
     revalidatePath("/dashboard")
-    return { success: true }
+
+    return { success: true, message: "Booking deleted successfully!" }
   } catch (error) {
-    console.error("Database error:", error)
+    logError(error, "deleteBooking")
     throw new Error(`Failed to delete booking: ${error instanceof Error ? error.message : "Unknown error"}`)
-  }
-}
-
-// New function to delete bulk bookings
-export async function deleteBulkBooking(bulkBookingId: string) {
-  try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user?.email) {
-      throw new Error("Unauthorized")
-    }
-
-    // Get the actual user from database using email
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    })
-
-    if (!user || user.role !== "ADMIN") {
-      throw new Error("Unauthorized - Admin access required")
-    }
-
-    // Get all bookings in the bulk booking with file paths
-    const bookings = await prisma.booking.findMany({
-      where: { bulkBookingId },
-    })
-
-    if (bookings.length === 0) {
-      throw new Error("Bulk booking not found")
-    }
-
-    // Delete all bookings in the bulk booking
-    await prisma.booking.deleteMany({
-      where: { bulkBookingId },
-    })
-
-    // Delete associated files (only delete unique files to avoid errors)
-    const uniqueFiles = new Set<string>()
-    bookings.forEach((booking) => {
-      if (booking.ecaaApprovalFile) uniqueFiles.add(booking.ecaaApprovalFile)
-      if (booking.trainingOrderFile) uniqueFiles.add(booking.trainingOrderFile)
-    })
-
-    for (const filePath of uniqueFiles) {
-      await deleteFile(filePath)
-    }
-
-    revalidatePath("/admin")
-    revalidatePath("/dashboard")
-    return { success: true, message: `Deleted ${bookings.length} bookings from bulk booking` }
-  } catch (error) {
-    console.error("Database error:", error)
-    throw new Error(`Failed to delete bulk booking: ${error instanceof Error ? error.message : "Unknown error"}`)
   }
 }
