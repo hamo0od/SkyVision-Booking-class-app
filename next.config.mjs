@@ -7,8 +7,6 @@ const nextConfig = {
   },
   // Enable source maps in production
   productionBrowserSourceMaps: true,
-  // Disable minification to preserve error messages
-  swcMinify: false,
   // Enable detailed logging
   logging: {
     fetches: {
@@ -32,10 +30,9 @@ const nextConfig = {
     }
     return config;
   },
-  // Environment variables
+  // Environment variables (removed NODE_ENV as it's not allowed)
   env: {
     SHOW_DETAILED_ERRORS: 'true',
-    NODE_ENV: process.env.NODE_ENV,
   },
   async headers() {
     return [
