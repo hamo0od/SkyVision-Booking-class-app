@@ -3,32 +3,49 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Calendar, Clock, MapPin, Users, FileText, Building2, Plane } from "lucide-react"
-import { PDFViewer } from "./pdf-viewer"
+import {
+  Calendar,
+  Clock,
+  MapPin,
+  User,
+  Users,
+  GraduationCap,
+  Award,
+  BookOpen,
+  X,
+  FileText,
+  Eye,
+  CalendarDays,
+  Building2,
+} from "lucide-react"
 import { useState } from "react"
+import { PDFViewer } from "./pdf-viewer"
 
 interface Booking {
-  id: number
-  date: Date
-  startTime: string
-  endTime: string
+  id: string
+  startTime: Date | string
+  endTime: Date | string
   purpose: string
+  status: string
   participants: number
-  status: "PENDING" | "APPROVED" | "REJECTED"
-  department: string
-  isECAA: boolean
-  ecaaLicense?: string | null
-  ecaaInstructor?: string | null
-  attachmentPath?: string | null
+  ecaaInstructorApproval: boolean
+  ecaaApprovalNumber: string | null
+  qualifications: string | null
+  instructorName: string
+  trainingOrder: string
+  courseReference: string | null
+  department?: string
+  ecaaApprovalFile: string | null
+  trainingOrderFile: string | null
+  bulkBookingId: string | null
+  user?: {
+    name?: string | null
+    email?: string
+  }
   classroom: {
     name: string
     capacity: number
   }
-  user: {
-    name: string
-    email: string
-  }
-  createdAt: Date
 }
 
 interface BookingDetailsModalProps {
@@ -37,246 +54,326 @@ interface BookingDetailsModalProps {
   onClose: () => void
 }
 
-// Helper functions for status checking
-const isPending = (status: string) => status.toUpperCase() === "PENDING"
-const isApproved = (status: string) => status.toUpperCase() === "APPROVED"
-const isRejected = (status: string) => status.toUpperCase() === "REJECTED"
-
-// Helper function to extract course title from bulk booking purpose
-const extractCourseTitle = (purpose: string) => {
-  if (purpose.includes("BULK_BOOKING:")) {
-    const parts = purpose.split("\n")
-    return parts.length > 1 ? parts[1] : "Bulk Booking"
-  }
-  return purpose
-}
-
-// Helper function to check if booking is bulk
-const isBulkBooking = (purpose: string) => purpose.includes("BULK_BOOKING:")
-
-// Helper function to extract bulk dates
-const extractBulkDates = (purpose: string) => {
-  if (!isBulkBooking(purpose)) return []
-
-  const match = purpose.match(/BULK_BOOKING:(.+?)(?:\n|$)/)
-  if (match) {
-    return match[1].split(",").map((date) => date.trim())
-  }
-  return []
-}
-
 export function BookingDetailsModal({ booking, isOpen, onClose }: BookingDetailsModalProps) {
-  const [showPDFViewer, setShowPDFViewer] = useState(false)
+  const [pdfViewer, setPdfViewer] = useState<{ filePath: string; fileName: string } | null>(null)
 
-  // Add null check at the beginning
+  // Early return if booking is null
   if (!booking) {
     return null
   }
 
-  const courseTitle = extractCourseTitle(booking.purpose)
-  const bulkDates = isBulkBooking(booking.purpose) ? extractBulkDates(booking.purpose) : []
-
-  const getStatusBadge = (status: string) => {
-    if (isPending(status)) {
-      return <Badge className="bg-yellow-100 text-yellow-800">⏳ PENDING</Badge>
-    } else if (isApproved(status)) {
-      return <Badge className="bg-green-100 text-green-800">✓ APPROVED</Badge>
-    } else if (isRejected(status)) {
-      return <Badge className="bg-red-100 text-red-800">✗ REJECTED</Badge>
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "APPROVED":
+        return "bg-green-100 text-green-800 border-green-200"
+      case "REJECTED":
+        return "bg-red-100 text-red-800 border-red-200"
+      default:
+        return "bg-yellow-100 text-yellow-800 border-yellow-200"
     }
-    return <Badge>{status}</Badge>
   }
 
-  const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString("en-US", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    })
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "APPROVED":
+        return "✓"
+      case "REJECTED":
+        return "✗"
+      default:
+        return "⏳"
+    }
   }
 
-  const formatTime = (time: string) => {
-    return new Date(`2000-01-01 ${time}`).toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    })
+  const isBulkBooking = (purpose: string) => {
+    return purpose.startsWith("BULK_BOOKING:")
   }
 
-  const isPDFFile = (filePath: string) => {
-    return filePath.toLowerCase().endsWith(".pdf")
+  const getBulkBookingInfo = (purpose: string) => {
+    if (!isBulkBooking(purpose)) return null
+    const [, datesStr, actualPurpose] = purpose.split(":", 3)
+    const dates = datesStr.split(",")
+    return { dates, actualPurpose }
   }
+
+  const openPDFViewer = (filePath: string, fileName: string) => {
+    setPdfViewer({ filePath, fileName })
+  }
+
+  const bulkInfo = getBulkBookingInfo(booking.purpose)
+  const displayPurpose = bulkInfo ? bulkInfo.actualPurpose : booking.purpose
+
+  // Safely get user information with fallbacks
+  const userName = booking.user?.name || "Unknown User"
+  const userEmail = booking.user?.email || "No email provided"
+
+  // Convert string dates to Date objects if needed
+  const startTime = typeof booking.startTime === "string" ? new Date(booking.startTime) : booking.startTime
+  const endTime = typeof booking.endTime === "string" ? new Date(booking.endTime) : booking.endTime
 
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <div className="flex items-start justify-between">
-              <DialogTitle className="text-xl font-bold">{courseTitle}</DialogTitle>
-              {getStatusBadge(booking.status)}
-            </div>
-            {isBulkBooking(booking.purpose) && (
-              <Badge variant="outline" className="w-fit">
-                📅 Bulk Booking ({bulkDates.length} dates)
+            <div className="flex items-center justify-between">
+              <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                <MapPin className="h-5 w-5 text-blue-600" />
+                Booking Details - {booking.classroom.name}
+                {bulkInfo && (
+                  <Badge variant="outline" className="ml-2 flex items-center gap-1">
+                    <CalendarDays className="h-3 w-3" />
+                    Bulk ({bulkInfo.dates.length} dates)
+                  </Badge>
+                )}
+              </DialogTitle>
+              <Badge className={`${getStatusColor(booking.status)} font-medium`}>
+                <span className="mr-1">{getStatusIcon(booking.status)}</span>
+                {booking.status}
               </Badge>
-            )}
+            </div>
           </DialogHeader>
 
           <div className="space-y-6">
             {/* Basic Information */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-blue-600" />
-                  <div>
-                    <p className="font-medium">Date</p>
-                    <p className="text-sm text-gray-600">{formatDate(booking.date)}</p>
-                  </div>
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Basic Information
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-600">Requested By</label>
+                  <p className="text-gray-900">{userName}</p>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <Clock className="h-5 w-5 text-green-600" />
+                <div>
+                  <label className="text-sm font-medium text-gray-600">Email</label>
+                  <p className="text-gray-900">{userEmail}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-600">Classroom</label>
+                  <p className="text-gray-900">
+                    {booking.classroom.name} (Capacity: {booking.classroom.capacity})
+                  </p>
+                </div>
+                {booking.department && (
                   <div>
-                    <p className="font-medium">Time</p>
-                    <p className="text-sm text-gray-600">
-                      {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
+                    <label className="text-sm font-medium text-gray-600">Department</label>
+                    <p className="text-gray-900 flex items-center gap-1">
+                      <Building2 className="h-4 w-4" />
+                      {booking.department}
                     </p>
                   </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5 text-red-600" />
-                  <div>
-                    <p className="font-medium">Classroom</p>
-                    <p className="text-sm text-gray-600">
-                      {booking.classroom.name} (Capacity: {booking.classroom.capacity})
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Users className="h-5 w-5 text-purple-600" />
-                  <div>
-                    <p className="font-medium">Participants</p>
-                    <p className="text-sm text-gray-600">{booking.participants} people</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Building2 className="h-5 w-5 text-orange-600" />
-                  <div>
-                    <p className="font-medium">Department</p>
-                    <p className="text-sm text-gray-600">{booking.department}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">👤</span>
-                  <div>
-                    <p className="font-medium">Requested by</p>
-                    <p className="text-sm text-gray-600">{booking.user.name}</p>
-                    <p className="text-xs text-gray-500">{booking.user.email}</p>
-                  </div>
+                )}
+                <div>
+                  <label className="text-sm font-medium text-gray-600">Booking ID</label>
+                  <p className="text-gray-900 font-mono text-sm">{booking.id}</p>
                 </div>
               </div>
             </div>
 
-            {/* Bulk Booking Dates */}
-            {isBulkBooking(booking.purpose) && bulkDates.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="font-medium flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-blue-600" />
-                  Bulk Booking Dates
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {bulkDates.map((date, index) => (
-                    <div key={index} className="bg-blue-50 text-blue-700 px-3 py-2 rounded text-sm text-center">
-                      {new Date(date).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
+            {/* Date & Time */}
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                Date & Time
+              </h3>
+              {bulkInfo ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Bulk Booking Dates</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                      {bulkInfo.dates.map((date, index) => (
+                        <div key={index} className="bg-white p-2 rounded border text-center">
+                          <span className="text-sm font-medium">
+                            {new Date(date).toLocaleDateString("en-US", {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Session Time</label>
+                    <p className="text-gray-900 flex items-center gap-1">
+                      <Clock className="h-4 w-4" />
+                      {startTime.toLocaleTimeString("en-US", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}{" "}
+                      -{" "}
+                      {endTime.toLocaleTimeString("en-US", {
+                        hour: "2-digit",
+                        minute: "2-digit",
                       })}
-                    </div>
-                  ))}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Date</label>
+                    <p className="text-gray-900">
+                      {startTime.toLocaleDateString("en-US", {
+                        weekday: "long",
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Time</label>
+                    <p className="text-gray-900 flex items-center gap-1">
+                      <Clock className="h-4 w-4" />
+                      {startTime.toLocaleTimeString("en-US", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}{" "}
+                      -{" "}
+                      {endTime.toLocaleTimeString("en-US", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
 
-            {/* ECAA Information */}
-            {booking.isECAA && (
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <h3 className="font-medium flex items-center gap-2 mb-3">
-                  <Plane className="h-5 w-5 text-blue-600" />
-                  ECAA Training Details
-                </h3>
-                <div className="space-y-2">
-                  {booking.ecaaLicense && (
-                    <div>
-                      <span className="font-medium">License Number: </span>
-                      <span className="text-gray-700">{booking.ecaaLicense}</span>
-                    </div>
-                  )}
-                  {booking.ecaaInstructor && (
-                    <div>
-                      <span className="font-medium">Instructor: </span>
-                      <span className="text-gray-700">{booking.ecaaInstructor}</span>
-                    </div>
-                  )}
+            {/* Training Details */}
+            <div className="bg-green-50 p-4 rounded-lg">
+              <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                <GraduationCap className="h-4 w-4" />
+                Training Details
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-600">Instructor Name</label>
+                  <p className="text-gray-900">{booking.instructorName}</p>
                 </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-600">Number of Participants</label>
+                  <p className="text-gray-900 flex items-center gap-1">
+                    <Users className="h-4 w-4" />
+                    {booking.participants}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-600">Training Order</label>
+                  <p className="text-gray-900">{booking.trainingOrder}</p>
+                </div>
+                {booking.courseReference && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Course Reference</label>
+                    <p className="text-gray-900">{booking.courseReference}</p>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
+
+            {/* ECAA Compliance */}
+            <div className="bg-purple-50 p-4 rounded-lg">
+              <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                <Award className="h-4 w-4" />
+                ECAA Instructor Approval
+              </h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-sm font-medium text-gray-600">ECAA Instructor Approval Status</label>
+                  <p className="text-gray-900">
+                    {booking.ecaaInstructorApproval ? (
+                      <span className="text-green-600 font-medium">✓ ECAA Instructor Approved</span>
+                    ) : (
+                      <span className="text-orange-600 font-medium">✗ Not ECAA Instructor Approved</span>
+                    )}
+                  </p>
+                </div>
+                {booking.ecaaInstructorApproval && booking.ecaaApprovalNumber && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Approval Number</label>
+                    <p className="text-gray-900 font-mono">{booking.ecaaApprovalNumber}</p>
+                  </div>
+                )}
+                {!booking.ecaaInstructorApproval && booking.qualifications && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Qualifications</label>
+                    <p className="text-gray-900">{booking.qualifications}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* File Attachments */}
+            <div className="bg-orange-50 p-4 rounded-lg">
+              <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Attachments
+              </h3>
+              <div className="space-y-3">
+                {booking.trainingOrderFile && (
+                  <div className="flex items-center justify-between p-2 bg-white rounded border">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-red-600" />
+                      <span className="text-sm font-medium">Training Order PDF</span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openPDFViewer(booking.trainingOrderFile!, "Training Order.pdf")}
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      View
+                    </Button>
+                  </div>
+                )}
+                {booking.ecaaApprovalFile && (
+                  <div className="flex items-center justify-between p-2 bg-white rounded border">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-green-600" />
+                      <span className="text-sm font-medium">ECAA Approval PDF</span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openPDFViewer(booking.ecaaApprovalFile!, "ECAA Approval.pdf")}
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      View
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
 
             {/* Course Title */}
-            <div>
-              <h3 className="font-medium mb-2">Course Title</h3>
-              <p className="text-gray-700 bg-gray-50 p-3 rounded">{courseTitle}</p>
+            <div className="bg-indigo-50 p-4 rounded-lg">
+              <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                <BookOpen className="h-4 w-4" />
+                Course Title
+              </h3>
+              <p className="text-gray-900 leading-relaxed">{displayPurpose}</p>
             </div>
+          </div>
 
-            {/* Attachment */}
-            {booking.attachmentPath && (
-              <div>
-                <h3 className="font-medium flex items-center gap-2 mb-3">
-                  <FileText className="h-5 w-5 text-gray-600" />
-                  Attachment
-                </h3>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.open(`/api/files${booking.attachmentPath}`, "_blank")}
-                  >
-                    📎 Download File
-                  </Button>
-                  {isPDFFile(booking.attachmentPath) && (
-                    <Button variant="outline" size="sm" onClick={() => setShowPDFViewer(true)}>
-                      👁️ View PDF
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Submission Information */}
-            <div className="border-t pt-4">
-              <div className="text-sm text-gray-500">
-                <p>Booking ID: #{booking.id}</p>
-                <p>Submitted: {new Date(booking.createdAt).toLocaleString()}</p>
-              </div>
-            </div>
+          <div className="flex justify-end pt-4 border-t">
+            <Button onClick={onClose} variant="outline">
+              <X className="h-4 w-4 mr-2" />
+              Close
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
 
       {/* PDF Viewer Modal */}
-      {booking.attachmentPath && isPDFFile(booking.attachmentPath) && (
+      {pdfViewer && (
         <PDFViewer
-          isOpen={showPDFViewer}
-          onClose={() => setShowPDFViewer(false)}
-          fileUrl={`/api/files${booking.attachmentPath}`}
+          filePath={pdfViewer.filePath}
+          fileName={pdfViewer.fileName}
+          isOpen={!!pdfViewer}
+          onClose={() => setPdfViewer(null)}
         />
       )}
     </>

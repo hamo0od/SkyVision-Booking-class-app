@@ -2,12 +2,8 @@
 const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['bcryptjs'],
-    // Force detailed errors in production
-    serverMinification: false,
   },
-  // Enable source maps in production
   productionBrowserSourceMaps: true,
-  // Enable detailed logging
   logging: {
     fetches: {
       fullUrl: true,
@@ -21,18 +17,6 @@ const nextConfig = {
   },
   images: {
     unoptimized: true,
-  },
-  // Custom webpack config to preserve error details
-  webpack: (config, { dev, isServer }) => {
-    if (!dev) {
-      // Preserve error messages in production
-      config.optimization.minimize = false;
-    }
-    return config;
-  },
-  // Environment variables (removed NODE_ENV as it's not allowed)
-  env: {
-    SHOW_DETAILED_ERRORS: 'true',
   },
   async headers() {
     return [
