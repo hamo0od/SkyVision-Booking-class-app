@@ -1,38 +1,42 @@
 "use client"
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { BookingDetailsModal } from "./booking-details-modal"
 import { cancelBooking } from "@/app/actions/bookings"
+import { Calendar, Clock, MapPin, Users, FileText, Trash2, Eye } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { Calendar, Clock, MapPin, Users, Eye, X, CalendarDays, Building2, User, Loader2 } from "lucide-react"
 
 interface Booking {
   id: string
-  startTime: Date | string
-  endTime: Date | string
+  startTime: Date
+  endTime: Date
   purpose: string
-  status: "PENDING" | "APPROVED" | "REJECTED"
-  participants: number
-  ecaaInstructorApproval: boolean
-  ecaaApprovalNumber: string | null
-  qualifications: string | null
   instructorName: string
   trainingOrder: string
   courseReference: string | null
-  department?: string
+  department: string
+  participants: number
+  status: "PENDING" | "APPROVED" | "REJECTED"
+  ecaaInstructorApproval: boolean
+  ecaaApprovalNumber: string | null
+  qualifications: string | null
   ecaaApprovalFile: string | null
   trainingOrderFile: string | null
   bulkBookingId: string | null
-  user?: {
-    name?: string | null
-    email?: string
-  }
+  createdAt: Date
   classroom: {
+    id: string
     name: string
     capacity: number
+    location: string
+  }
+  user: {
+    id: string
+    name: string | null
+    email: string
   }
 }
 
@@ -43,91 +47,89 @@ interface BookingListProps {
 
 export function BookingList({ bookings, showUserInfo = false }: BookingListProps) {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null)
+  const [isTransitionPending, startTransition] = useTransition()
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
   const { toast } = useToast()
+
+  const isBookingPending = (status: string): boolean => {
+    return status.toUpperCase() === "PENDING"
+  }
+
+  const handleCancelBooking = async (bookingId: string) => {
+    setCancellingId(bookingId)
+    startTransition(async () => {
+      try {
+        const result = await cancelBooking(bookingId)
+        if (result.success) {
+          toast({
+            title: "Success",
+            description: result.message || "Booking cancelled successfully",
+          })
+        }
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: error instanceof Error ? error.message : "Failed to cancel booking",
+          variant: "destructive",
+        })
+      } finally {
+        setCancellingId(null)
+      }
+    })
+  }
 
   const getStatusColor = (status: string) => {
     switch (status.toUpperCase()) {
+      case "PENDING":
+        return "bg-yellow-100 text-yellow-800 border-yellow-200"
       case "APPROVED":
         return "bg-green-100 text-green-800 border-green-200"
       case "REJECTED":
         return "bg-red-100 text-red-800 border-red-200"
       default:
-        return "bg-yellow-100 text-yellow-800 border-yellow-200"
+        return "bg-gray-100 text-gray-800 border-gray-200"
     }
   }
 
-  const getStatusIcon = (status: string) => {
-    switch (status.toUpperCase()) {
-      case "APPROVED":
-        return "✓"
-      case "REJECTED":
-        return "✗"
-      default:
-        return "⏳"
-    }
+  const formatDate = (date: Date) => {
+    return new Date(date).toLocaleDateString("en-US", {
+      weekday: "short",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    })
   }
 
-  const isPending = (status: string) => {
-    return status.toUpperCase() === "PENDING"
+  const formatTime = (date: Date) => {
+    return new Date(date).toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })
   }
 
-  const isBulkBooking = (purpose: string) => {
-    return purpose.startsWith("BULK_BOOKING:")
-  }
-
-  const getBulkBookingInfo = (purpose: string) => {
-    if (!isBulkBooking(purpose)) return null
-    const [, datesStr, actualPurpose] = purpose.split(":", 3)
-    const dates = datesStr.split(",")
-    return { dates, actualPurpose }
-  }
-
-  const getDisplayTitle = (purpose: string) => {
-    const bulkInfo = getBulkBookingInfo(purpose)
-    return bulkInfo ? bulkInfo.actualPurpose : purpose
-  }
-
-  const handleViewDetails = (booking: Booking) => {
-    setSelectedBooking(booking)
-    setIsModalOpen(true)
-  }
-
-  const handleCancelBooking = async (bookingId: string) => {
-    if (!confirm("Are you sure you want to cancel this booking?")) {
-      return
+  const extractBulkBookingInfo = (booking: Booking) => {
+    if (!booking.purpose.startsWith("BULK_BOOKING:")) {
+      return { isBulk: false, dates: [], courseTitle: booking.purpose }
     }
 
-    setCancellingBookingId(bookingId)
-    try {
-      const result = await cancelBooking(bookingId)
-      if (result.success) {
-        toast({
-          title: "Booking cancelled",
-          description: result.message || "Your booking has been cancelled successfully.",
-        })
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to cancel booking",
-        variant: "destructive",
-      })
-    } finally {
-      setCancellingBookingId(null)
+    const parts = booking.purpose.split(":")
+    if (parts.length < 3) {
+      return { isBulk: true, dates: [], courseTitle: booking.purpose }
     }
+
+    const dates = parts[1].split(",")
+    const courseTitle = parts.slice(2).join(":")
+
+    return { isBulk: true, dates, courseTitle }
   }
 
   if (bookings.length === 0) {
     return (
-      <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50">
-        <CardContent className="p-8 text-center">
-          <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
-            <Calendar className="h-8 w-8 text-gray-400" />
-          </div>
-          <p className="text-gray-500 text-lg">No bookings found</p>
-          <p className="text-gray-400 text-sm mt-1">Your bookings will appear here once you make a reservation</p>
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center py-12">
+          <Calendar className="h-12 w-12 text-gray-400 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No bookings found</h3>
+          <p className="text-gray-500 text-center">You haven't made any classroom bookings yet.</p>
         </CardContent>
       </Card>
     )
@@ -137,116 +139,111 @@ export function BookingList({ bookings, showUserInfo = false }: BookingListProps
     <>
       <div className="space-y-4">
         {bookings.map((booking) => {
-          const bulkInfo = getBulkBookingInfo(booking.purpose)
-          const displayTitle = getDisplayTitle(booking.purpose)
-          const startTime = typeof booking.startTime === "string" ? new Date(booking.startTime) : booking.startTime
-          const endTime = typeof booking.endTime === "string" ? new Date(booking.endTime) : booking.endTime
+          const bulkInfo = extractBulkBookingInfo(booking)
+          const isCancelling = cancellingId === booking.id
+          const isBookingPending = isBookingPending(booking.status)
 
           return (
-            <Card
-              key={booking.id}
-              className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50 hover:shadow-xl transition-shadow duration-200"
-            >
-              <CardHeader className="pb-3">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <CardTitle className="text-lg line-clamp-2">{displayTitle}</CardTitle>
-                      {bulkInfo && (
-                        <Badge variant="outline" className="flex items-center gap-1 shrink-0">
-                          <CalendarDays className="h-3 w-3" />
-                          Bulk ({bulkInfo.dates.length} dates)
-                        </Badge>
-                      )}
+            <Card key={booking.id} className="hover:shadow-md transition-shadow">
+              <CardContent className="p-6">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  <div className="flex-1 space-y-3">
+                    {/* Title and Status */}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <h3 className="text-lg font-semibold text-gray-900 truncate">
+                        {bulkInfo.isBulk ? bulkInfo.courseTitle : booking.purpose}
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        {bulkInfo.isBulk && (
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                            Bulk ({bulkInfo.dates.length} dates)
+                          </Badge>
+                        )}
+                        <Badge className={getStatusColor(booking.status)}>{booking.status.toUpperCase()}</Badge>
+                      </div>
                     </div>
-                  </div>
-                  <Badge className={`${getStatusColor(booking.status)} font-medium shrink-0 ml-2`}>
-                    <span className="mr-1">{getStatusIcon(booking.status)}</span>
-                    {booking.status}
-                  </Badge>
-                </div>
-              </CardHeader>
 
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <Calendar className="h-4 w-4 shrink-0" />
-                    <span>
-                      {startTime.toLocaleDateString("en-US", {
-                        weekday: "short",
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <Clock className="h-4 w-4 shrink-0" />
-                    <span>
-                      {startTime.toLocaleTimeString("en-US", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}{" "}
-                      -{" "}
-                      {endTime.toLocaleTimeString("en-US", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <MapPin className="h-4 w-4 shrink-0" />
-                    <span>{booking.classroom.name}</span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <Users className="h-4 w-4 shrink-0" />
-                    <span>{booking.participants} participants</span>
-                  </div>
-
-                  {showUserInfo && booking.user && (
-                    <div className="flex items-center gap-2 text-gray-600 sm:col-span-2">
-                      <User className="h-4 w-4 shrink-0" />
-                      <span>{booking.user.name || booking.user.email}</span>
+                    {/* Booking Details */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-sm text-gray-600">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 flex-shrink-0" />
+                        <span className="truncate">
+                          {bulkInfo.isBulk ? "Multiple Dates" : formatDate(booking.startTime)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 flex-shrink-0" />
+                        <span className="truncate">
+                          {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 flex-shrink-0" />
+                        <span className="truncate">{booking.classroom.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 flex-shrink-0" />
+                        <span className="truncate">{booking.participants} participants</span>
+                      </div>
                     </div>
-                  )}
 
-                  {booking.department && (
-                    <div className="flex items-center gap-2 text-gray-600 sm:col-span-2">
-                      <Building2 className="h-4 w-4 shrink-0" />
-                      <span>{booking.department}</span>
+                    {/* Bulk Booking Dates */}
+                    {bulkInfo.isBulk && bulkInfo.dates.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-sm font-medium text-gray-700 mb-2">Bulk Booking Dates:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {bulkInfo.dates.slice(0, 6).map((dateStr, index) => (
+                            <Badge key={index} variant="outline" className="text-xs">
+                              {new Date(dateStr).toLocaleDateString()}
+                            </Badge>
+                          ))}
+                          {bulkInfo.dates.length > 6 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{bulkInfo.dates.length - 6} more
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Additional Info */}
+                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                      <FileText className="h-4 w-4" />
+                      <span className="truncate">Submitted {new Date(booking.createdAt).toLocaleDateString()}</span>
                     </div>
-                  )}
-                </div>
 
-                <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-gray-100">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleViewDetails(booking)}
-                    className="flex-1 bg-transparent"
-                  >
-                    <Eye className="h-4 w-4 mr-1" />
-                    Details
-                  </Button>
+                    {showUserInfo && (
+                      <div className="text-sm text-gray-600">
+                        <span className="font-medium">Requested by:</span> {booking.user.name || booking.user.email}
+                      </div>
+                    )}
+                  </div>
 
-                  {isPending(booking.status) && (
+                  {/* Action Buttons */}
+                  <div className="flex flex-col sm:flex-row gap-2 lg:flex-col lg:w-auto">
                     <Button
+                      variant="outline"
                       size="sm"
-                      variant="destructive"
-                      onClick={() => handleCancelBooking(booking.id)}
-                      disabled={cancellingBookingId === booking.id}
-                      className="flex-1"
+                      onClick={() => setSelectedBooking(booking)}
+                      className="flex items-center gap-2"
                     >
-                      {cancellingBookingId === booking.id ? (
-                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                      ) : (
-                        <X className="h-4 w-4 mr-1" />
-                      )}
-                      {cancellingBookingId === booking.id ? "Cancelling..." : "Cancel"}
+                      <Eye className="h-4 w-4" />
+                      Details
                     </Button>
-                  )}
+
+                    {isBookingPending && (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleCancelBooking(booking.id)}
+                        disabled={isCancelling || isTransitionPending}
+                        className="flex items-center gap-2"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        {isCancelling ? "Cancelling..." : "Cancel"}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -254,7 +251,8 @@ export function BookingList({ bookings, showUserInfo = false }: BookingListProps
         })}
       </div>
 
-      <BookingDetailsModal booking={selectedBooking} isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      {/* Booking Details Modal */}
+      {selectedBooking && <BookingDetailsModal booking={selectedBooking} onClose={() => setSelectedBooking(null)} />}
     </>
   )
 }
