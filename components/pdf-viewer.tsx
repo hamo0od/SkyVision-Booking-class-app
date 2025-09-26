@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { FileText, Download, X } from "lucide-react"
+import { X, Download, ZoomIn, ZoomOut } from "lucide-react"
+import { useState } from "react"
 
 interface PDFViewerProps {
   filePath: string
@@ -13,7 +13,7 @@ interface PDFViewerProps {
 }
 
 export function PDFViewer({ filePath, fileName, isOpen, onClose }: PDFViewerProps) {
-  const [isLoading, setIsLoading] = useState(true)
+  const [zoom, setZoom] = useState(100)
 
   const handleDownload = () => {
     const link = document.createElement("a")
@@ -24,18 +24,25 @@ export function PDFViewer({ filePath, fileName, isOpen, onClose }: PDFViewerProp
     document.body.removeChild(link)
   }
 
+  const zoomIn = () => setZoom((prev) => Math.min(prev + 25, 200))
+  const zoomOut = () => setZoom((prev) => Math.max(prev - 25, 50))
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl max-h-[90vh] p-0">
+        <DialogHeader className="p-4 pb-2">
           <div className="flex items-center justify-between">
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              {fileName}
-            </DialogTitle>
+            <DialogTitle className="text-lg font-semibold">{fileName}</DialogTitle>
             <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={zoomOut} disabled={zoom <= 50}>
+                <ZoomOut className="h-4 w-4" />
+              </Button>
+              <span className="text-sm font-medium min-w-[60px] text-center">{zoom}%</span>
+              <Button variant="outline" size="sm" onClick={zoomIn} disabled={zoom >= 200}>
+                <ZoomIn className="h-4 w-4" />
+              </Button>
               <Button variant="outline" size="sm" onClick={handleDownload}>
-                <Download className="h-4 w-4 mr-2" />
+                <Download className="h-4 w-4 mr-1" />
                 Download
               </Button>
               <Button variant="outline" size="sm" onClick={onClose}>
@@ -44,18 +51,16 @@ export function PDFViewer({ filePath, fileName, isOpen, onClose }: PDFViewerProp
             </div>
           </div>
         </DialogHeader>
-        <div className="flex-1 overflow-hidden">
-          {isLoading && (
-            <div className="flex items-center justify-center h-96">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-            </div>
-          )}
-          <iframe
-            src={`/api/files/${filePath}`}
-            className="w-full h-96 border-0"
-            onLoad={() => setIsLoading(false)}
-            title={fileName}
-          />
+
+        <div className="flex-1 p-4 pt-0">
+          <div className="border rounded-lg overflow-hidden bg-gray-100 h-[70vh]">
+            <iframe
+              src={`/api/files/${filePath}#zoom=${zoom}`}
+              className="w-full h-full"
+              title={fileName}
+              style={{ border: "none" }}
+            />
+          </div>
         </div>
       </DialogContent>
     </Dialog>

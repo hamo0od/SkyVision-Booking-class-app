@@ -36,6 +36,23 @@ export function BookingForm({ classrooms }: BookingFormProps) {
   const [success, setSuccess] = useState<string>("")
   const { toast } = useToast()
 
+  // Initialize departments array properly
+  const departments = [
+    "Cockpit Training",
+    "Cabin Crew",
+    "Station",
+    "OCC",
+    "Compliance",
+    "Safety",
+    "Security",
+    "Maintenance",
+    "Planning & Engineering",
+    "HR & Financial",
+    "Commercial & Planning",
+    "IT",
+    "Meetings",
+  ]
+
   const handleSubmit = async (formData: FormData) => {
     setError("")
     setSuccess("")
@@ -83,22 +100,6 @@ export function BookingForm({ classrooms }: BookingFormProps) {
       })
     }
   }
-
-  const departments = [
-    "Cockpit Training",
-    "Cabin Crew",
-    "Station",
-    "OCC",
-    "Compliance",
-    "Safety",
-    "Security",
-    "Maintenance",
-    "Planning & Engineering",
-    "HR & Financial",
-    "Commercial & Planning",
-    "IT",
-    "Meetings",
-  ]
 
   return (
     <div className="max-w-4xl mx-auto p-6">

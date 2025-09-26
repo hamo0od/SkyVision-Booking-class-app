@@ -69,22 +69,38 @@ export function BookingTimeline() {
   }
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString("en-US", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    })
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) {
+        return "Invalid Date"
+      }
+      return date.toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    } catch (error) {
+      console.error("Date formatting error:", error)
+      return "Invalid Date"
+    }
   }
 
   const formatDateShort = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    })
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) {
+        return "Invalid"
+      }
+      return date.toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      })
+    } catch (error) {
+      console.error("Date formatting error:", error)
+      return "Invalid"
+    }
   }
 
   // Generate time slots from 7:00 to 23:00 (11 PM) in 30-minute intervals

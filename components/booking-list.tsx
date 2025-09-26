@@ -92,19 +92,37 @@ export function BookingList({ bookings, showUserInfo = false }: BookingListProps
   }
 
   const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString("en-US", {
-      weekday: "short",
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    })
+    try {
+      const dateObj = new Date(date)
+      if (isNaN(dateObj.getTime())) {
+        return "Invalid Date"
+      }
+      return dateObj.toLocaleDateString("en-US", {
+        weekday: "short",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    } catch (error) {
+      console.error("Date formatting error:", error)
+      return "Invalid Date"
+    }
   }
 
   const formatTime = (date: Date) => {
-    return new Date(date).toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    })
+    try {
+      const dateObj = new Date(date)
+      if (isNaN(dateObj.getTime())) {
+        return "Invalid Time"
+      }
+      return dateObj.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    } catch (error) {
+      console.error("Time formatting error:", error)
+      return "Invalid Time"
+    }
   }
 
   const extractBulkBookingInfo = (booking: Booking) => {
@@ -141,7 +159,7 @@ export function BookingList({ bookings, showUserInfo = false }: BookingListProps
         {bookings.map((booking) => {
           const bulkInfo = extractBulkBookingInfo(booking)
           const isCancelling = cancellingId === booking.id
-          const isBookingPending = isBookingPending(booking.status)
+          const isBookingPendingCheck = isBookingPending(booking.status)
 
           return (
             <Card key={booking.id} className="hover:shadow-md transition-shadow">
@@ -231,7 +249,7 @@ export function BookingList({ bookings, showUserInfo = false }: BookingListProps
                       Details
                     </Button>
 
-                    {isBookingPending && (
+                    {isBookingPendingCheck && (
                       <Button
                         variant="destructive"
                         size="sm"
