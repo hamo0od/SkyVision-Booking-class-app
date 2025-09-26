@@ -13,7 +13,7 @@ export default function Error({
   reset: () => void
 }) {
   useEffect(() => {
-    // Log the error to the console for debugging
+    // Log the error to an error reporting service
     console.error("Application error:", error)
   }, [error])
 
@@ -28,21 +28,20 @@ export default function Error({
           <CardDescription className="text-gray-600">An error occurred while processing your request.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {error.message && (
-            <div className="rounded-lg bg-red-50 border border-red-200 p-3">
-              <h4 className="text-sm font-medium text-red-800 mb-1">Error Details:</h4>
-              <p className="text-sm text-red-700">{error.message}</p>
-              {error.digest && <p className="text-xs text-red-600 mt-1">Error ID: {error.digest}</p>}
-            </div>
-          )}
-
-          <div className="flex flex-col gap-2">
-            <Button onClick={reset} className="w-full">
-              <RefreshCw className="mr-2 h-4 w-4" />
+          <div className="rounded-lg bg-red-50 p-4 border border-red-200">
+            <h4 className="text-sm font-medium text-red-800 mb-2">Error Details:</h4>
+            <p className="text-sm text-red-700 font-mono break-words">
+              {error.message || "An unexpected error occurred"}
+            </p>
+            {error.digest && <p className="text-xs text-red-600 mt-2">Error ID: {error.digest}</p>}
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button onClick={reset} className="flex-1">
+              <RefreshCw className="h-4 w-4 mr-2" />
               Try again
             </Button>
-            <Button variant="outline" onClick={() => (window.location.href = "/")} className="w-full">
-              <Home className="mr-2 h-4 w-4" />
+            <Button variant="outline" onClick={() => (window.location.href = "/")} className="flex-1">
+              <Home className="h-4 w-4 mr-2" />
               Go to Home
             </Button>
           </div>

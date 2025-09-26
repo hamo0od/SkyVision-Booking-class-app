@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    serverComponentsExternalPackages: ['bcryptjs'],
+    serverComponentsExternalPackages: ['@prisma/client'],
   },
   productionBrowserSourceMaps: true,
   logging: {
