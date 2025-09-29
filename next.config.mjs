@@ -15,9 +15,6 @@ const nextConfig = {
     // removeConsole: true,
     removeConsole: { exclude: ['error'] },
   },
-  serverActions: {
-    bodySizeLimit: '20mb',
-  },
 }
 
 export default nextConfig
