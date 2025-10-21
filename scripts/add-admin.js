@@ -1,5 +1,5 @@
-import { PrismaClient } from "@prisma/client"
-import bcrypt from "bcryptjs"
+const { PrismaClient } = require("@prisma/client")
+const bcrypt = require("bcryptjs")
 
 const prisma = new PrismaClient()
 
@@ -20,6 +20,8 @@ async function addAdmin() {
     })
 
     console.log("Admin user created/verified:", admin.email)
+    console.log("Email: admin@example.com")
+    console.log("Password: password")
   } catch (error) {
     console.error("Error adding admin user:", error)
     process.exit(1)
