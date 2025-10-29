@@ -13,6 +13,7 @@ interface SimpleDateTimePickerProps {
   onChange: (value: string) => void
   dateOnly?: boolean
   timeOnly?: boolean
+  defaultDate?: Date
 }
 
 export function SimpleDateTimePicker({
@@ -20,9 +21,10 @@ export function SimpleDateTimePicker({
   onChange,
   dateOnly = false,
   timeOnly = false,
+  defaultDate,
 }: SimpleDateTimePickerProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(value ? new Date(value) : undefined)
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(value ? new Date(value) : defaultDate)
   const [selectedTime, setSelectedTime] = useState(value ? format(new Date(value), "HH:mm") : "")
 
   // Generate time options (30-minute intervals from 7 AM to 11 PM)
@@ -108,7 +110,17 @@ export function SimpleDateTimePicker({
             {value ? format(new Date(value), "PPP") : "Pick a date"}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0 z-50" align="start">
+        <PopoverContent
+          className="w-auto p-0 z-50 pointer-events-auto"
+          align="start"
+          onPointerDownOutside={(e) => {
+            // Only close if clicking outside the popover content
+            const target = e.target as HTMLElement
+            if (!target.closest('[role="button"]') && !target.closest('[role="gridcell"]')) {
+              setIsOpen(false)
+            }
+          }}
+        >
           <Calendar
             mode="single"
             selected={value ? new Date(value) : undefined}
@@ -155,7 +167,7 @@ export function SimpleDateTimePicker({
             {selectedDate ? format(selectedDate, "PPP") : "Pick a date"}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
+        <PopoverContent className="w-auto p-0 z-50 pointer-events-auto" align="start">
           <Calendar
             mode="single"
             selected={selectedDate}

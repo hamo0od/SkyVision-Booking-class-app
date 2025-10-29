@@ -42,7 +42,20 @@ export function BulkDatePicker({ selectedDates, onSelectedDatesChange }: BulkDat
             {selectedDates.length > 0 ? `${selectedDates.length} dates selected` : "Select dates"}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0 z-50" align="start">
+        <PopoverContent
+          className="w-auto p-0 z-50 pointer-events-auto"
+          align="start"
+          onPointerDownOutside={(e) => {
+            // Only close if clicking outside the popover content
+            const target = e.target as HTMLElement
+            if (!target.closest('[role="button"]') && !target.closest('[role="gridcell"]')) {
+              // Allow closing only on the Done button
+              if (target.closest("button") && target.textContent === "Done") {
+                setIsOpen(false)
+              }
+            }
+          }}
+        >
           <Calendar
             mode="multiple"
             selected={selectedCalendarDates}
