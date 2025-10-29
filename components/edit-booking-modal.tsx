@@ -106,13 +106,44 @@ export function EditBookingModal({ booking, isOpen, onClose, classrooms, onSucce
     setError("")
 
     try {
+      if (isBulkBooking) {
+        if (selectedDates.length === 0) {
+          setError("Please select at least one date for bulk booking")
+          setIsLoading(false)
+          return
+        }
+      } else {
+        if (!selectedDate) {
+          setError("Please select a date")
+          setIsLoading(false)
+          return
+        }
+        if (!startTime) {
+          setError("Please select a start time")
+          setIsLoading(false)
+          return
+        }
+        if (!endTime) {
+          setError("Please select an end time")
+          setIsLoading(false)
+          return
+        }
+      }
+
       const formData = new FormData(e.target as HTMLFormElement)
       formData.set("isBulkBooking", isBulkBooking.toString())
+
+      if (!isBulkBooking && selectedDate && startTime && endTime) {
+        formData.set("startTime", `${selectedDate}T${startTime}:00`)
+        formData.set("endTime", `${selectedDate}T${endTime}:00`)
+      }
 
       if (isBulkBooking && selectedDates.length > 0) {
         selectedDates.forEach((date) => {
           formData.append("selectedDates", date)
         })
+        formData.set("startTime", `2000-01-01T${startTime}:00`)
+        formData.set("endTime", `2000-01-01T${endTime}:00`)
       }
 
       const result = await editBooking(booking.id, formData)
