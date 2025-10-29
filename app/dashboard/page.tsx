@@ -52,13 +52,13 @@ export default async function Dashboard() {
               </span>
               {user.role === "ADMIN" && (
                 <Link href="/admin">
-                  <Button variant="outline" className="border-blue-200 text-blue-600 hover:bg-blue-50">
+                  <Button variant="outline" className="border-blue-200 text-blue-600 hover:bg-blue-50 bg-transparent">
                     Admin Panel
                   </Button>
                 </Link>
               )}
               <Link href="/timeline">
-                <Button variant="outline" className="border-green-200 text-green-600 hover:bg-green-50">
+                <Button variant="outline" className="border-green-200 text-green-600 hover:bg-green-50 bg-transparent">
                   Full Timeline
                 </Button>
               </Link>
@@ -83,7 +83,7 @@ export default async function Dashboard() {
             </div>
             <div className="w-full">
               <h2 className="text-xl sm:text-2xl font-bold mb-4 lg:mb-6 text-gray-800">Your Bookings</h2>
-              <BookingList bookings={userBookings} />
+              <BookingList bookings={userBookings} classrooms={classrooms} />
             </div>
           </div>
 

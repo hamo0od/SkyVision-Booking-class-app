@@ -615,3 +615,300 @@ export async function deleteBulkBooking(bulkBookingId: string) {
     throw new Error("Failed to delete bulk booking")
   }
 }
+
+// New function to handle booking updates
+export async function editBooking(bookingId: string, formData: FormData) {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.user?.email) {
+    throw new Error("Unauthorized - No session found")
+  }
+
+  // Get the actual user from database using email
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+  })
+
+  if (!user) {
+    throw new Error("User not found in database")
+  }
+
+  // Get the existing booking
+  const existingBooking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+  })
+
+  if (!existingBooking) {
+    throw new Error("Booking not found")
+  }
+
+  // Check if user owns this booking
+  if (existingBooking.userId !== user.id) {
+    throw new Error("Unauthorized - You can only edit your own bookings")
+  }
+
+  // Check if booking is still pending
+  if (existingBooking.status !== "PENDING") {
+    throw new Error("You can only edit pending bookings")
+  }
+
+  const classroomId = sanitizeInput((formData.get("classroomId") as string | null)?.trim() || "")
+  const startTimeRaw = formData.get("startTime") as string | null
+  const endTimeRaw = formData.get("endTime") as string | null
+  const purpose = sanitizeInput((formData.get("purpose") as string | null)?.trim() || "")
+  const instructorName = sanitizeInput((formData.get("instructorName") as string | null)?.trim() || "")
+  const trainingOrder = sanitizeInput((formData.get("trainingOrder") as string | null)?.trim() || "")
+  const courseReference = sanitizeInput((formData.get("courseReference") as string | null)?.trim() || "")
+  const department = sanitizeInput((formData.get("department") as string | null)?.trim() || "")
+  const participants = Number.parseInt((formData.get("participants") as string | null) || "0", 10)
+  const ecaaInstructorApprovalRaw = formData.get("ecaaInstructorApproval") as string | null
+
+  // Handle bulk booking
+  const isBulkBooking = formData.get("isBulkBooking") === "true"
+  const selectedDates = formData.getAll("selectedDates") as string[]
+
+  if (ecaaInstructorApprovalRaw !== "true" && ecaaInstructorApprovalRaw !== "false") {
+    throw new Error("Please select your ECAA instructor approval status")
+  }
+  const ecaaInstructorApproval = ecaaInstructorApprovalRaw === "true"
+
+  const ecaaApprovalNumber = ecaaInstructorApproval
+    ? sanitizeInput((formData.get("ecaaApprovalNumber") as string | null)?.trim() || "")
+    : null
+  const qualifications = !ecaaInstructorApproval
+    ? sanitizeInput((formData.get("qualifications") as string | null)?.trim() || "")
+    : null
+
+  // Handle file uploads
+  const ecaaApprovalFile = formData.get("ecaaApprovalFile") as File | null
+  const trainingOrderFile = formData.get("trainingOrderFile") as File | null
+
+  if (!classroomId || !startTimeRaw || !endTimeRaw || !purpose || !instructorName || !trainingOrder || !department) {
+    throw new Error("All fields are required")
+  }
+
+  if (isBulkBooking && selectedDates.length === 0) {
+    throw new Error("Please select at least one date for bulk booking")
+  }
+
+  if (trainingOrderFile && trainingOrderFile.type !== "application/pdf") {
+    throw new Error("Training order file must be a PDF")
+  }
+  if (trainingOrderFile && trainingOrderFile.size > 10 * 1024 * 1024) {
+    throw new Error("Training order file must be less than 10MB")
+  }
+
+  if (ecaaApprovalFile) {
+    if (ecaaApprovalFile.type !== "application/pdf") {
+      throw new Error("ECAA approval file must be a PDF")
+    }
+    if (ecaaApprovalFile.size > 10 * 1024 * 1024) {
+      throw new Error("ECAA approval file must be less than 10MB")
+    }
+  }
+
+  if (ecaaInstructorApproval && !ecaaApprovalNumber) {
+    throw new Error("ECAA approval number is required")
+  }
+
+  if (!ecaaInstructorApproval && !qualifications) {
+    throw new Error("Qualifications are required if you don't have ECAA instructor approval")
+  }
+
+  const validDepartments = [
+    "Cockpit Training",
+    "Cabin Crew",
+    "Station",
+    "OCC",
+    "Compliance",
+    "Safety",
+    "Security",
+    "Maintenance",
+    "Planning & Engineering",
+    "HR & Financial",
+    "Commercial & Planning",
+    "IT",
+    "Meetings",
+  ]
+
+  if (!validDepartments.includes(department)) {
+    throw new Error("Please select a valid department")
+  }
+
+  const startTime = new Date(startTimeRaw)
+  const endTime = new Date(endTimeRaw)
+
+  if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
+    throw new Error("Invalid date/time provided")
+  }
+
+  if (startTime >= endTime) {
+    throw new Error("End time must be after start time")
+  }
+
+  if (participants < 1) {
+    throw new Error("Number of participants must be at least 1")
+  }
+
+  // Check classroom exists and capacity
+  const classroom = await prisma.classroom.findUnique({
+    where: { id: classroomId },
+  })
+
+  if (!classroom) {
+    throw new Error("Invalid classroom selection")
+  }
+
+  if (participants > classroom.capacity) {
+    throw new Error(`This classroom can only accommodate ${classroom.capacity} participants`)
+  }
+
+  // Check for conflicts (excluding current booking)
+  if (isBulkBooking && selectedDates.length > 0) {
+    for (const dateStr of selectedDates) {
+      const bookingStartTime = new Date(`${dateStr}T${startTime.toTimeString().split(" ")[0]}`)
+      const bookingEndTime = new Date(`${dateStr}T${endTime.toTimeString().split(" ")[0]}`)
+
+      const conflict = await checkBookingConflict(classroomId, bookingStartTime, bookingEndTime, bookingId)
+
+      if (conflict) {
+        const conflictDate = new Date(conflict.conflictDate).toLocaleDateString()
+        const conflictStartTime = conflict.conflictStartTime.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+        const conflictEndTime = conflict.conflictEndTime.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+
+        if (conflict.isBulkBooking) {
+          throw new Error(
+            `Time slot conflicts with existing bulk booking on ${conflictDate} from ${conflictStartTime} to ${conflictEndTime}`,
+          )
+        } else {
+          throw new Error(
+            `Time slot conflicts with existing booking on ${conflictDate} from ${conflictStartTime} to ${conflictEndTime}`,
+          )
+        }
+      }
+    }
+  } else {
+    const conflict = await checkBookingConflict(classroomId, startTime, endTime, bookingId)
+
+    if (conflict) {
+      const conflictDate = new Date(conflict.conflictDate).toLocaleDateString()
+      const conflictStartTime = conflict.conflictStartTime.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+      const conflictEndTime = conflict.conflictEndTime.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+
+      if (conflict.isBulkBooking) {
+        throw new Error(
+          `Time slot conflicts with existing bulk booking on ${conflictDate} from ${conflictStartTime} to ${conflictEndTime}`,
+        )
+      } else {
+        throw new Error(
+          `Time slot conflicts with existing booking on ${conflictDate} from ${conflictStartTime} to ${conflictEndTime}`,
+        )
+      }
+    }
+  }
+
+  // Handle file uploads
+  const uploadDir = join(process.cwd(), "uploads", "bookings")
+  await mkdir(uploadDir, { recursive: true })
+
+  let ecaaApprovalFilePath: string | null = existingBooking.ecaaApprovalFile
+  let trainingOrderFilePath: string | null = existingBooking.trainingOrderFile
+
+  // Delete old files if new ones are provided
+  if (ecaaApprovalFile) {
+    if (existingBooking.ecaaApprovalFile) {
+      await deleteFile(existingBooking.ecaaApprovalFile)
+    }
+    const ecaaFileName = `ecaa-${user.id}-${Date.now()}.pdf`
+    const ecaaFilePath = join(uploadDir, ecaaFileName)
+    const ecaaBuffer = Buffer.from(await ecaaApprovalFile.arrayBuffer())
+    await writeFile(ecaaFilePath, ecaaBuffer)
+    ecaaApprovalFilePath = `uploads/bookings/${ecaaFileName}`
+  }
+
+  if (trainingOrderFile) {
+    if (existingBooking.trainingOrderFile) {
+      await deleteFile(existingBooking.trainingOrderFile)
+    }
+    const trainingFileName = `training-${user.id}-${Date.now()}.pdf`
+    const trainingFilePath = join(uploadDir, trainingFileName)
+    const trainingBuffer = Buffer.from(await trainingOrderFile.arrayBuffer())
+    await writeFile(trainingFilePath, trainingBuffer)
+    trainingOrderFilePath = `uploads/bookings/${trainingFileName}`
+  }
+
+  try {
+    if (isBulkBooking && selectedDates.length > 0) {
+      const bulkPurpose = `BULK_BOOKING:${selectedDates.join(",")}:${purpose}`
+      const firstDate = selectedDates[0]
+      const firstBookingStartTime = new Date(`${firstDate}T${startTime.toTimeString().split(" ")[0]}`)
+      const firstBookingEndTime = new Date(`${firstDate}T${endTime.toTimeString().split(" ")[0]}`)
+
+      await prisma.booking.update({
+        where: { id: bookingId },
+        data: {
+          classroomId,
+          startTime: firstBookingStartTime,
+          endTime: firstBookingEndTime,
+          purpose: bulkPurpose,
+          instructorName,
+          trainingOrder,
+          courseReference: courseReference || null,
+          department,
+          participants,
+          ecaaInstructorApproval,
+          ecaaApprovalNumber,
+          qualifications,
+          ecaaApprovalFile: ecaaApprovalFilePath,
+          trainingOrderFile: trainingOrderFilePath,
+          status: "PENDING", // Reset status to PENDING after edit
+        },
+      })
+
+      revalidatePath("/dashboard")
+      return {
+        success: true,
+        message: `Bulk booking updated successfully! Your request is now pending approval.`,
+      }
+    } else {
+      await prisma.booking.update({
+        where: { id: bookingId },
+        data: {
+          classroomId,
+          startTime,
+          endTime,
+          purpose,
+          instructorName,
+          trainingOrder,
+          courseReference: courseReference || null,
+          department,
+          participants,
+          ecaaInstructorApproval,
+          ecaaApprovalNumber,
+          qualifications,
+          ecaaApprovalFile: ecaaApprovalFilePath,
+          trainingOrderFile: trainingOrderFilePath,
+          status: "PENDING", // Reset status to PENDING after edit
+        },
+      })
+
+      revalidatePath("/dashboard")
+      return { success: true, message: "Booking updated successfully! Your request is now pending approval." }
+    }
+  } catch (error) {
+    console.error("Database error:", error)
+    throw new Error("Failed to update booking. Please try again.")
+  }
+}

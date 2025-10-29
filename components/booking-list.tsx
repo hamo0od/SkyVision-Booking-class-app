@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { BookingDetailsModal } from "./booking-details-modal"
+import { EditBookingModal } from "./edit-booking-modal"
 import { cancelBooking } from "@/app/actions/bookings"
-import { Calendar, Clock, MapPin, Users, FileText, Loader2 } from "lucide-react"
+import { Calendar, Clock, MapPin, Users, FileText, Loader2, Edit2 } from "lucide-react"
 
 interface User {
   id: string
@@ -45,10 +46,12 @@ interface Booking {
 interface BookingListProps {
   bookings: Booking[]
   showUserInfo?: boolean
+  classrooms?: Classroom[]
 }
 
-export function BookingList({ bookings, showUserInfo = false }: BookingListProps) {
+export function BookingList({ bookings, showUserInfo = false, classrooms = [] }: BookingListProps) {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
+  const [editingBooking, setEditingBooking] = useState<Booking | null>(null)
   const [cancellingBookings, setCancellingBookings] = useState<Set<string>>(new Set())
 
   const handleCancelBooking = async (bookingId: string) => {
@@ -238,22 +241,33 @@ export function BookingList({ bookings, showUserInfo = false }: BookingListProps
               </Button>
 
               {isPending(booking) && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => handleCancelBooking(booking.id)}
-                  disabled={cancellingBookings.has(booking.id)}
-                  className="flex-1 sm:flex-none"
-                >
-                  {cancellingBookings.has(booking.id) ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Cancelling...
-                    </>
-                  ) : (
-                    "🗑️ Cancel"
-                  )}
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEditingBooking(booking)}
+                    className="flex-1 sm:flex-none text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                  >
+                    <Edit2 className="h-4 w-4 mr-2" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => handleCancelBooking(booking.id)}
+                    disabled={cancellingBookings.has(booking.id)}
+                    className="flex-1 sm:flex-none"
+                  >
+                    {cancellingBookings.has(booking.id) ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Cancelling...
+                      </>
+                    ) : (
+                      "🗑️ Cancel"
+                    )}
+                  </Button>
+                </>
               )}
             </div>
           </CardContent>
@@ -266,6 +280,19 @@ export function BookingList({ bookings, showUserInfo = false }: BookingListProps
           isOpen={!!selectedBooking}
           onClose={() => setSelectedBooking(null)}
           showUserInfo={showUserInfo}
+        />
+      )}
+
+      {editingBooking && (
+        <EditBookingModal
+          booking={editingBooking}
+          isOpen={!!editingBooking}
+          onClose={() => setEditingBooking(null)}
+          classrooms={classrooms}
+          onSuccess={() => {
+            setEditingBooking(null)
+            // Page will revalidate automatically
+          }}
         />
       )}
     </div>
