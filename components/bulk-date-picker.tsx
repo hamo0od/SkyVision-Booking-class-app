@@ -42,7 +42,7 @@ export function BulkDatePicker({ selectedDates, onSelectedDatesChange }: BulkDat
             {selectedDates.length > 0 ? `${selectedDates.length} dates selected` : "Select dates"}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
+        <PopoverContent className="w-auto p-0 z-50" align="start">
           <Calendar
             mode="multiple"
             selected={selectedCalendarDates}
