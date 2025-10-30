@@ -679,7 +679,7 @@ export async function editBooking(bookingId: string, formData: FormData) {
     ? sanitizeInput((formData.get("qualifications") as string | null)?.trim() || "")
     : null
 
-  // Handle file uploads
+  // Handle file uploads - Make files optional during editing
   const ecaaApprovalFile = formData.get("ecaaApprovalFile") as File | null
   const trainingOrderFile = formData.get("trainingOrderFile") as File | null
 
