@@ -146,14 +146,18 @@ export function EditBookingModal({ booking, isOpen, onClose, classrooms, onSucce
         formData.set("endTime", `2000-01-01T${endTime}:00`)
       }
 
-      const result = await editBooking(booking.id, formData)
+      try {
+        const result = await editBooking(booking.id, formData)
 
-      if (result.success) {
-        onClose()
-        onSuccess?.()
+        if (result.success) {
+          onClose()
+          onSuccess?.()
+        }
+      } catch (serverError: any) {
+        const errorMessage = serverError?.message || "Failed to update booking. Please try again."
+        console.error("[v0] Edit booking error:", serverError)
+        setError(errorMessage)
       }
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "An error occurred")
     } finally {
       setIsLoading(false)
     }

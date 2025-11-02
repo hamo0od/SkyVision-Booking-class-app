@@ -81,28 +81,32 @@ export function BookingForm({ classrooms }: BookingFormProps) {
         })
       }
 
-      const result = await createBooking(formData)
+      try {
+        const result = await createBooking(formData)
 
-      if (result.success) {
-        setIsSuccess(true)
-        // Reset form
-        const form = e.target as HTMLFormElement
-        form.reset()
-        setSelectedDate("")
-        setStartTime("")
-        setEndTime("")
-        setSelectedDates([])
-        setIsBulkBooking(false)
-        setEcaaInstructorApproval("true")
-        setFileErrors({ ecaa: "", trainingOrder: "" })
+        if (result.success) {
+          setIsSuccess(true)
+          // Reset form
+          const form = e.target as HTMLFormElement
+          form.reset()
+          setSelectedDate("")
+          setStartTime("")
+          setEndTime("")
+          setSelectedDates([])
+          setIsBulkBooking(false)
+          setEcaaInstructorApproval("true")
+          setFileErrors({ ecaa: "", trainingOrder: "" })
 
-        // Hide success message after 5 seconds
-        setTimeout(() => {
-          setIsSuccess(false)
-        }, 5000)
+          // Hide success message after 5 seconds
+          setTimeout(() => {
+            setIsSuccess(false)
+          }, 5000)
+        }
+      } catch (serverError: any) {
+        const errorMessage = serverError?.message || "Failed to create booking. Please try again."
+        console.error("[v0] Create booking error:", serverError)
+        setError(errorMessage)
       }
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "An error occurred")
     } finally {
       setIsLoading(false)
     }
