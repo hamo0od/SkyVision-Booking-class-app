@@ -182,7 +182,17 @@ export async function createBooking(formData: FormData) {
   }
 
   // Validate file types and sizes
-  if (ecaaApprovalFile) {
+  if (trainingOrderFile && trainingOrderFile.size > 0) {
+    if (trainingOrderFile.type !== "application/pdf") {
+      throw new Error("Training order file must be a PDF")
+    }
+    if (trainingOrderFile.size > 10 * 1024 * 1024) {
+      // 10MB
+      throw new Error("Training order file must be less than 10MB")
+    }
+  }
+
+  if (ecaaApprovalFile && ecaaApprovalFile.size > 0) {
     if (ecaaApprovalFile.type !== "application/pdf") {
       throw new Error("ECAA approval file must be a PDF")
     }
@@ -190,14 +200,6 @@ export async function createBooking(formData: FormData) {
       // 10MB
       throw new Error("ECAA approval file must be less than 10MB")
     }
-  }
-
-  if (trainingOrderFile.type !== "application/pdf") {
-    throw new Error("Training order file must be a PDF")
-  }
-  if (trainingOrderFile.size > 10 * 1024 * 1024) {
-    // 10MB
-    throw new Error("Training order file must be less than 10MB")
   }
 
   // Validate department
@@ -261,7 +263,7 @@ export async function createBooking(formData: FormData) {
   let ecaaApprovalFilePath: string | null = null
   let trainingOrderFilePath: string | null = null
 
-  if (ecaaApprovalFile) {
+  if (ecaaApprovalFile && ecaaApprovalFile.size > 0) {
     const ecaaFileName = `ecaa-${user.id}-${Date.now()}.pdf`
     ecaaApprovalFilePath = join(uploadDir, ecaaFileName)
     const ecaaBuffer = Buffer.from(await ecaaApprovalFile.arrayBuffer())
@@ -269,11 +271,13 @@ export async function createBooking(formData: FormData) {
     ecaaApprovalFilePath = `uploads/bookings/${ecaaFileName}`
   }
 
-  const trainingFileName = `training-${user.id}-${Date.now()}.pdf`
-  trainingOrderFilePath = join(uploadDir, trainingFileName)
-  const trainingBuffer = Buffer.from(await trainingOrderFile.arrayBuffer())
-  await writeFile(trainingOrderFilePath, trainingBuffer)
-  trainingOrderFilePath = `uploads/bookings/${trainingFileName}`
+  if (trainingOrderFile && trainingOrderFile.size > 0) {
+    const trainingFileName = `training-${user.id}-${Date.now()}.pdf`
+    trainingOrderFilePath = join(uploadDir, trainingFileName)
+    const trainingBuffer = Buffer.from(await trainingOrderFile.arrayBuffer())
+    await writeFile(trainingOrderFilePath, trainingBuffer)
+    trainingOrderFilePath = `uploads/bookings/${trainingFileName}`
+  }
 
   try {
     if (isBulkBooking && selectedDates.length > 0) {
@@ -691,14 +695,17 @@ export async function editBooking(bookingId: string, formData: FormData) {
     throw new Error("Please select at least one date for bulk booking")
   }
 
-  if (trainingOrderFile && trainingOrderFile.type !== "application/pdf") {
-    throw new Error("Training order file must be a PDF")
-  }
-  if (trainingOrderFile && trainingOrderFile.size > 10 * 1024 * 1024) {
-    throw new Error("Training order file must be less than 10MB")
+  // Only validate files if they were actually selected and have size > 0
+  if (trainingOrderFile && trainingOrderFile.size > 0) {
+    if (trainingOrderFile.type !== "application/pdf") {
+      throw new Error("Training order file must be a PDF")
+    }
+    if (trainingOrderFile.size > 10 * 1024 * 1024) {
+      throw new Error("Training order file must be less than 10MB")
+    }
   }
 
-  if (ecaaApprovalFile) {
+  if (ecaaApprovalFile && ecaaApprovalFile.size > 0) {
     if (ecaaApprovalFile.type !== "application/pdf") {
       throw new Error("ECAA approval file must be a PDF")
     }
@@ -827,7 +834,7 @@ export async function editBooking(bookingId: string, formData: FormData) {
   let trainingOrderFilePath: string | null = existingBooking.trainingOrderFile
 
   // Delete old files if new ones are provided
-  if (ecaaApprovalFile) {
+  if (ecaaApprovalFile && ecaaApprovalFile.size > 0) {
     if (existingBooking.ecaaApprovalFile) {
       await deleteFile(existingBooking.ecaaApprovalFile)
     }
@@ -838,7 +845,7 @@ export async function editBooking(bookingId: string, formData: FormData) {
     ecaaApprovalFilePath = `uploads/bookings/${ecaaFileName}`
   }
 
-  if (trainingOrderFile) {
+  if (trainingOrderFile && trainingOrderFile.size > 0) {
     if (existingBooking.trainingOrderFile) {
       await deleteFile(existingBooking.trainingOrderFile)
     }
