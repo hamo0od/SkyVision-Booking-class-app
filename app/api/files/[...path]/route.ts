@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { readFile } from "fs/promises"
 import { join } from "path"
 
-export async function GET(request: NextRequest, { params }: { params: { path: string[] } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const session = await getServerSession(authOptions)
 
   if (!session?.user?.email) {
@@ -12,7 +12,8 @@ export async function GET(request: NextRequest, { params }: { params: { path: st
   }
 
   try {
-    const filePath = params.path.join("/")
+    const resolvedParams = await params
+    const filePath = resolvedParams.path.join("/")
     const fullPath = join(process.cwd(), filePath)
 
     // Security check: ensure the file is in the uploads directory
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest, { params }: { params: { path: st
     return new NextResponse(fileBuffer, {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="${params.path[params.path.length - 1]}"`,
+        "Content-Disposition": `inline; filename="${resolvedParams.path[resolvedParams.path.length - 1]}"`,
       },
     })
   } catch (error) {
