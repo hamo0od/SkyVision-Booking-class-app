@@ -15,7 +15,7 @@ import { headers } from "next/headers"
 
 export async function createUser(formData: FormData) {
   // Get client IP for rate limiting
-  const headersList = headers()
+  const headersList = await headers()
   const forwarded = headersList.get("x-forwarded-for")
   const clientIP = forwarded ? forwarded.split(",")[0].trim() : "unknown"
 
@@ -102,7 +102,7 @@ export async function createUser(formData: FormData) {
 
 export async function updateUser(userId: string, formData: FormData) {
   // Get client IP for rate limiting
-  const headersList = headers()
+  const headersList = await headers()
   const forwarded = headersList.get("x-forwarded-for")
   const clientIP = forwarded ? forwarded.split(",")[0].trim() : "unknown"
 
@@ -215,7 +215,7 @@ export async function updateUser(userId: string, formData: FormData) {
 
 export async function deleteUser(userId: string) {
   // Get client IP for rate limiting
-  const headersList = headers()
+  const headersList = await headers()
   const forwarded = headersList.get("x-forwarded-for")
   const clientIP = forwarded ? forwarded.split(",")[0].trim() : "unknown"
 
