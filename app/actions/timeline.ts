@@ -2,18 +2,47 @@
 
 import { prisma } from "@/lib/db"
 
+const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/
+
+function parseDateKeyLocal(dateKey: string): Date | null {
+  if (!DATE_KEY_REGEX.test(dateKey)) return null
+  const [yearRaw, monthRaw, dayRaw] = dateKey.split("-")
+  const year = Number(yearRaw)
+  const month = Number(monthRaw)
+  const day = Number(dayRaw)
+  const parsed = new Date(year, month - 1, day, 0, 0, 0, 0)
+
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null
+  }
+
+  return parsed
+}
+
 export async function getTimelineBookings(selectedDate: string) {
   try {
+    const localDate = parseDateKeyLocal(selectedDate)
+    if (!localDate) {
+      return {
+        bookings: [],
+        classrooms: [],
+      }
+    }
+
     // Get all classrooms
     const classrooms = await prisma.classroom.findMany({
       orderBy: { name: "asc" },
     })
 
     // Parse the selected date
-    const startOfDay = new Date(selectedDate)
+    const startOfDay = new Date(localDate)
     startOfDay.setHours(0, 0, 0, 0)
 
-    const endOfDay = new Date(selectedDate)
+    const endOfDay = new Date(localDate)
     endOfDay.setHours(23, 59, 59, 999)
 
     // Get all bookings for the selected date
@@ -69,10 +98,10 @@ export async function getTimelineBookings(selectedDate: string) {
           const bookingEndTime = new Date(booking.endTime)
 
           // Create new start/end times for the selected date
-          const dateSpecificStart = new Date(selectedDate)
+          const dateSpecificStart = new Date(localDate)
           dateSpecificStart.setHours(bookingStartTime.getHours(), bookingStartTime.getMinutes(), 0, 0)
 
-          const dateSpecificEnd = new Date(selectedDate)
+          const dateSpecificEnd = new Date(localDate)
           dateSpecificEnd.setHours(bookingEndTime.getHours(), bookingEndTime.getMinutes(), 0, 0)
 
           processedBookings.push({

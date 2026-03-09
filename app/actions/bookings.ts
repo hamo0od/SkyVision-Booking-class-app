@@ -6,7 +6,173 @@ import { authOptions } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { writeFile, mkdir, unlink } from "fs/promises"
 import { join } from "path"
+import { randomUUID } from "crypto"
 import { sanitizeInput } from "@/lib/security"
+
+type BookingActionResult = {
+  success: boolean
+  message: string
+  requestId: string
+  errorCode?: string
+}
+
+const MAX_PDF_FILE_SIZE_BYTES = 10 * 1024 * 1024
+const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/
+const DATE_TIME_REGEX = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/
+const VALID_DEPARTMENTS = [
+  "Cockpit Training",
+  "Cabin Crew",
+  "Station",
+  "OCC",
+  "Compliance",
+  "Safety",
+  "Security",
+  "Maintenance",
+  "Planning & Engineering",
+  "HR & Financial",
+  "Commercial & Planning",
+  "IT",
+  "Meetings",
+]
+
+function successResult(requestId: string, message: string): BookingActionResult {
+  return { success: true, message, requestId }
+}
+
+function errorResult(requestId: string, errorCode: string, message: string): BookingActionResult {
+  return { success: false, errorCode, message, requestId }
+}
+
+function logBookingError(
+  operation: string,
+  requestId: string,
+  error: unknown,
+  context: Record<string, unknown> = {},
+) {
+  console.error(`[bookings.${operation}]`, {
+    requestId,
+    context,
+    error:
+      error instanceof Error
+        ? {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+          }
+        : error,
+  })
+}
+
+function formatDateKey(date: Date): string {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, "0")
+  const day = `${date.getDate()}`.padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+function parseDateKey(dateKey: string): Date | null {
+  if (!DATE_KEY_REGEX.test(dateKey)) return null
+  const [yearRaw, monthRaw, dayRaw] = dateKey.split("-")
+  const year = Number(yearRaw)
+  const month = Number(monthRaw)
+  const day = Number(dayRaw)
+  const parsed = new Date(year, month - 1, day, 0, 0, 0, 0)
+
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null
+  }
+
+  return parsed
+}
+
+function parseDateTimeLocal(value: string): Date | null {
+  const match = DATE_TIME_REGEX.exec(value)
+  if (!match) return null
+
+  const [, yearRaw, monthRaw, dayRaw, hourRaw, minuteRaw, secondRaw = "0"] = match
+  const year = Number(yearRaw)
+  const month = Number(monthRaw)
+  const day = Number(dayRaw)
+  const hour = Number(hourRaw)
+  const minute = Number(minuteRaw)
+  const second = Number(secondRaw)
+
+  const parsed = new Date(year, month - 1, day, hour, minute, second, 0)
+
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day ||
+    parsed.getHours() !== hour ||
+    parsed.getMinutes() !== minute ||
+    parsed.getSeconds() !== second
+  ) {
+    return null
+  }
+
+  return parsed
+}
+
+function applyTimeToDate(dateKey: string, timeSource: Date): Date | null {
+  const baseDate = parseDateKey(dateKey)
+  if (!baseDate) return null
+
+  baseDate.setHours(timeSource.getHours(), timeSource.getMinutes(), timeSource.getSeconds(), 0)
+  return baseDate
+}
+
+function normalizeDateKeys(dateKeys: string[]): string[] {
+  const uniqueDates = new Set<string>()
+  for (const rawDate of dateKeys) {
+    const trimmed = sanitizeInput(rawDate?.trim() || "")
+    const parsed = parseDateKey(trimmed)
+    if (parsed) uniqueDates.add(formatDateKey(parsed))
+  }
+  return Array.from(uniqueDates).sort((a, b) => a.localeCompare(b))
+}
+
+async function validatePdfFile(
+  file: File | null,
+  fieldLabel: string,
+  requestId: string,
+  required: boolean,
+): Promise<{ ok: true; buffer: Buffer | null } | { ok: false; result: BookingActionResult }> {
+  if (!file || file.size === 0) {
+    if (required) {
+      return { ok: false, result: errorResult(requestId, "VALIDATION_ERROR", `${fieldLabel} is required`) }
+    }
+    return { ok: true, buffer: null }
+  }
+
+  if (file.size > MAX_PDF_FILE_SIZE_BYTES) {
+    return {
+      ok: false,
+      result: errorResult(
+        requestId,
+        "VALIDATION_ERROR",
+        `${fieldLabel} must be less than ${Math.round(MAX_PDF_FILE_SIZE_BYTES / (1024 * 1024))}MB`,
+      ),
+    }
+  }
+
+  const lowerName = file.name.toLowerCase()
+  if (!lowerName.endsWith(".pdf")) {
+    return { ok: false, result: errorResult(requestId, "VALIDATION_ERROR", `${fieldLabel} must be a PDF`) }
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer())
+  const signature = buffer.subarray(0, 5).toString("utf8")
+
+  if (signature !== "%PDF-") {
+    return { ok: false, result: errorResult(requestId, "VALIDATION_ERROR", `${fieldLabel} must be a valid PDF`) }
+  }
+
+  return { ok: true, buffer }
+}
 
 // Helper function to delete files
 async function deleteFile(filePath: string) {
@@ -31,7 +197,7 @@ function extractDatesFromBulkPurpose(purpose: string): string[] {
     return []
   }
 
-  return parts[1].split(",")
+  return normalizeDateKeys(parts[1].split(","))
 }
 
 // Helper function to check if two time ranges overlap
@@ -68,18 +234,21 @@ async function checkBookingConflict(classroomId: string, startTime: Date, endTim
     if (booking.purpose.startsWith("BULK_BOOKING:")) {
       // Handle bulk booking conflicts
       const bulkDates = extractDatesFromBulkPurpose(booking.purpose)
-      const newBookingDateStr = startTime.toISOString().split("T")[0] // Get YYYY-MM-DD format
+      const newBookingDateStr = formatDateKey(startTime)
 
       // Check if the new booking date matches any of the bulk booking dates
       for (const bulkDateStr of bulkDates) {
-        const bulkDate = new Date(bulkDateStr)
-        const bulkDateFormatted = bulkDate.toISOString().split("T")[0]
+        const bulkDateFormatted = parseDateKey(bulkDateStr) ? bulkDateStr : ""
 
         if (newBookingDateStr === bulkDateFormatted) {
           // Same date, now check time overlap
           // Create full datetime objects for the bulk booking on this specific date
-          const bulkStartTime = new Date(`${bulkDateStr}T${booking.startTime.toTimeString().split(" ")[0]}`)
-          const bulkEndTime = new Date(`${bulkDateStr}T${booking.endTime.toTimeString().split(" ")[0]}`)
+          const bulkStartTime = applyTimeToDate(bulkDateStr, booking.startTime)
+          const bulkEndTime = applyTimeToDate(bulkDateStr, booking.endTime)
+
+          if (!bulkStartTime || !bulkEndTime) {
+            continue
+          }
 
           if (timeRangesOverlap(startTime, endTime, bulkStartTime, bulkEndTime)) {
             return {
@@ -97,7 +266,7 @@ async function checkBookingConflict(classroomId: string, startTime: Date, endTim
       if (timeRangesOverlap(startTime, endTime, booking.startTime, booking.endTime)) {
         return {
           ...booking,
-          conflictDate: booking.startTime.toISOString().split("T")[0],
+          conflictDate: formatDateKey(booking.startTime),
           conflictStartTime: booking.startTime,
           conflictEndTime: booking.endTime,
           isBulkBooking: false,
@@ -109,187 +278,163 @@ async function checkBookingConflict(classroomId: string, startTime: Date, endTim
   return null
 }
 
-export async function createBooking(formData: FormData) {
-  const session = await getServerSession(authOptions)
-
-  if (!session?.user?.email) {
-    throw new Error("Unauthorized - No session found")
-  }
-
-  // Get the actual user from database using email
-  const user = await prisma.user.findUnique({
-    where: { email: session.user.email },
-  })
-
-  if (!user) {
-    throw new Error("User not found in database")
-  }
-
-  const classroomId = sanitizeInput((formData.get("classroomId") as string | null)?.trim() || "")
-  const startTimeRaw = formData.get("startTime") as string | null
-  const endTimeRaw = formData.get("endTime") as string | null
-  const purpose = sanitizeInput((formData.get("purpose") as string | null)?.trim() || "")
-  const instructorName = sanitizeInput((formData.get("instructorName") as string | null)?.trim() || "")
-  const trainingOrder = sanitizeInput((formData.get("trainingOrder") as string | null)?.trim() || "")
-  const courseReference = sanitizeInput((formData.get("courseReference") as string | null)?.trim() || "")
-  const department = sanitizeInput((formData.get("department") as string | null)?.trim() || "")
-  const participants = Number.parseInt((formData.get("participants") as string | null) || "0", 10)
-  const ecaaInstructorApprovalRaw = formData.get("ecaaInstructorApproval") as string | null
-
-  // Handle bulk booking
-  const isBulkBooking = formData.get("isBulkBooking") === "true"
-  const selectedDates = formData.getAll("selectedDates") as string[]
-
-  // Require explicit ECAA choice: must be "true" or "false"
-  if (ecaaInstructorApprovalRaw !== "true" && ecaaInstructorApprovalRaw !== "false") {
-    throw new Error("Please select your ECAA instructor approval status")
-  }
-  const ecaaInstructorApproval = ecaaInstructorApprovalRaw === "true"
-
-  const ecaaApprovalNumber = ecaaInstructorApproval
-    ? sanitizeInput((formData.get("ecaaApprovalNumber") as string | null)?.trim() || "")
-    : null
-  const qualifications = !ecaaInstructorApproval
-    ? sanitizeInput((formData.get("qualifications") as string | null)?.trim() || "")
-    : null
-
-  // Handle file uploads
-  const ecaaApprovalFile = formData.get("ecaaApprovalFile") as File | null
-  const trainingOrderFile = formData.get("trainingOrderFile") as File | null
-
-  if (!classroomId || !startTimeRaw || !endTimeRaw || !purpose || !instructorName || !trainingOrder || !department) {
-    throw new Error("All fields are required")
-  }
-
-  if (isBulkBooking && selectedDates.length === 0) {
-    throw new Error("Please select at least one date for bulk booking")
-  }
-
-  if (!trainingOrderFile) {
-    throw new Error("Training order PDF file is required")
-  }
-
-  if (ecaaInstructorApproval && !ecaaApprovalFile) {
-    throw new Error("ECAA approval PDF file is required when you have ECAA instructor approval")
-  }
-
-  if (ecaaInstructorApproval && !ecaaApprovalNumber) {
-    throw new Error("ECAA approval number is required")
-  }
-
-  if (!ecaaInstructorApproval && !qualifications) {
-    throw new Error("Qualifications are required if you don't have ECAA instructor approval")
-  }
-
-  // Validate file types and sizes
-  if (trainingOrderFile && trainingOrderFile.size > 0) {
-    if (trainingOrderFile.type !== "application/pdf") {
-      throw new Error("Training order file must be a PDF")
+export async function createBooking(formData: FormData): Promise<BookingActionResult> {
+  const requestId = randomUUID()
+  const createdFilePaths: string[] = []
+  const cleanupCreatedFiles = async () => {
+    for (const filePath of createdFilePaths) {
+      await deleteFile(filePath)
     }
-    if (trainingOrderFile.size > 10 * 1024 * 1024) {
-      // 10MB
-      throw new Error("Training order file must be less than 10MB")
-    }
-  }
-
-  if (ecaaApprovalFile && ecaaApprovalFile.size > 0) {
-    if (ecaaApprovalFile.type !== "application/pdf") {
-      throw new Error("ECAA approval file must be a PDF")
-    }
-    if (ecaaApprovalFile.size > 10 * 1024 * 1024) {
-      // 10MB
-      throw new Error("ECAA approval file must be less than 10MB")
-    }
-  }
-
-  // Validate department
-  const validDepartments = [
-    "Cockpit Training",
-    "Cabin Crew",
-    "Station",
-    "OCC",
-    "Compliance",
-    "Safety",
-    "Security",
-    "Maintenance",
-    "Planning & Engineering",
-    "HR & Financial",
-    "Commercial & Planning",
-    "IT",
-    "Meetings",
-  ]
-
-  if (!validDepartments.includes(department)) {
-    throw new Error("Please select a valid department")
-  }
-
-  const startTime = new Date(startTimeRaw)
-  const endTime = new Date(endTimeRaw)
-
-  if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
-    throw new Error("Invalid date/time provided")
-  }
-
-  if (startTime >= endTime) {
-    throw new Error("End time must be after start time")
-  }
-
-  // Only check for past time if it's NOT a bulk booking
-  if (!isBulkBooking && startTime < new Date()) {
-    throw new Error("Cannot book time in the past")
-  }
-
-  if (participants < 1) {
-    throw new Error("Number of participants must be at least 1")
-  }
-
-  // Check classroom exists and capacity
-  const classroom = await prisma.classroom.findUnique({
-    where: { id: classroomId },
-  })
-
-  if (!classroom) {
-    throw new Error("Invalid classroom selection")
-  }
-
-  if (participants > classroom.capacity) {
-    throw new Error(`This classroom can only accommodate ${classroom.capacity} participants`)
-  }
-
-  // Save uploaded files
-  const uploadDir = join(process.cwd(), "uploads", "bookings")
-  await mkdir(uploadDir, { recursive: true })
-
-  let ecaaApprovalFilePath: string | null = null
-  let trainingOrderFilePath: string | null = null
-
-  if (ecaaApprovalFile && ecaaApprovalFile.size > 0) {
-    const ecaaFileName = `ecaa-${user.id}-${Date.now()}.pdf`
-    ecaaApprovalFilePath = join(uploadDir, ecaaFileName)
-    const ecaaBuffer = Buffer.from(await ecaaApprovalFile.arrayBuffer())
-    await writeFile(ecaaApprovalFilePath, ecaaBuffer)
-    ecaaApprovalFilePath = `uploads/bookings/${ecaaFileName}`
-  }
-
-  if (trainingOrderFile && trainingOrderFile.size > 0) {
-    const trainingFileName = `training-${user.id}-${Date.now()}.pdf`
-    trainingOrderFilePath = join(uploadDir, trainingFileName)
-    const trainingBuffer = Buffer.from(await trainingOrderFile.arrayBuffer())
-    await writeFile(trainingOrderFilePath, trainingBuffer)
-    trainingOrderFilePath = `uploads/bookings/${trainingFileName}`
+    createdFilePaths.length = 0
   }
 
   try {
-    if (isBulkBooking && selectedDates.length > 0) {
-      // Handle bulk booking - create ONE booking with multiple dates stored in purpose
-      const bulkBookingId = `bulk-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    const session = await getServerSession(authOptions)
 
-      // Check for conflicts for each date
-      for (const dateStr of selectedDates) {
-        const bookingStartTime = new Date(`${dateStr}T${startTime.toTimeString().split(" ")[0]}`)
-        const bookingEndTime = new Date(`${dateStr}T${endTime.toTimeString().split(" ")[0]}`)
+    if (!session?.user?.email) {
+      return errorResult(requestId, "UNAUTHORIZED", "Your session has expired. Please sign in again.")
+    }
 
-        // Enhanced conflict detection
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+    })
+
+    if (!user) {
+      return errorResult(requestId, "UNAUTHORIZED", "Your account was not found. Please contact an administrator.")
+    }
+
+    const classroomId = sanitizeInput((formData.get("classroomId") as string | null)?.trim() || "")
+    const startTimeRaw = sanitizeInput((formData.get("startTime") as string | null)?.trim() || "")
+    const endTimeRaw = sanitizeInput((formData.get("endTime") as string | null)?.trim() || "")
+    const purpose = sanitizeInput((formData.get("purpose") as string | null)?.trim() || "")
+    const instructorName = sanitizeInput((formData.get("instructorName") as string | null)?.trim() || "")
+    const trainingOrder = sanitizeInput((formData.get("trainingOrder") as string | null)?.trim() || "")
+    const courseReference = sanitizeInput((formData.get("courseReference") as string | null)?.trim() || "")
+    const department = sanitizeInput((formData.get("department") as string | null)?.trim() || "")
+    const participants = Number.parseInt((formData.get("participants") as string | null) || "0", 10)
+    const ecaaInstructorApprovalRaw = formData.get("ecaaInstructorApproval") as string | null
+    const isBulkBooking = formData.get("isBulkBooking") === "true"
+    const selectedDates = normalizeDateKeys(formData.getAll("selectedDates") as string[])
+
+    if (!classroomId || !startTimeRaw || !endTimeRaw || !purpose || !instructorName || !trainingOrder || !department) {
+      return errorResult(requestId, "VALIDATION_ERROR", "All fields are required.")
+    }
+
+    if (!VALID_DEPARTMENTS.includes(department)) {
+      return errorResult(requestId, "VALIDATION_ERROR", "Please select a valid department.")
+    }
+
+    if (ecaaInstructorApprovalRaw !== "true" && ecaaInstructorApprovalRaw !== "false") {
+      return errorResult(requestId, "VALIDATION_ERROR", "Please select your ECAA instructor approval status.")
+    }
+    const ecaaInstructorApproval = ecaaInstructorApprovalRaw === "true"
+
+    const ecaaApprovalNumber = ecaaInstructorApproval
+      ? sanitizeInput((formData.get("ecaaApprovalNumber") as string | null)?.trim() || "")
+      : null
+    const qualifications = !ecaaInstructorApproval
+      ? sanitizeInput((formData.get("qualifications") as string | null)?.trim() || "")
+      : null
+
+    if (ecaaInstructorApproval && !ecaaApprovalNumber) {
+      return errorResult(requestId, "VALIDATION_ERROR", "ECAA approval number is required.")
+    }
+
+    if (!ecaaInstructorApproval && !qualifications) {
+      return errorResult(
+        requestId,
+        "VALIDATION_ERROR",
+        "Qualifications are required if you don't have ECAA instructor approval.",
+      )
+    }
+
+    const startTime = parseDateTimeLocal(startTimeRaw)
+    const endTime = parseDateTimeLocal(endTimeRaw)
+
+    if (!startTime || !endTime) {
+      return errorResult(requestId, "INVALID_DATE", "Invalid date/time provided.")
+    }
+
+    if (startTime >= endTime) {
+      return errorResult(requestId, "VALIDATION_ERROR", "End time must be after start time.")
+    }
+
+    if (!isBulkBooking && startTime < new Date()) {
+      return errorResult(requestId, "VALIDATION_ERROR", "Cannot book time in the past.")
+    }
+
+    if (isBulkBooking && selectedDates.length === 0) {
+      return errorResult(requestId, "VALIDATION_ERROR", "Please select at least one date for bulk booking.")
+    }
+
+    if (!Number.isInteger(participants) || participants < 1) {
+      return errorResult(requestId, "VALIDATION_ERROR", "Number of participants must be at least 1.")
+    }
+
+    const classroom = await prisma.classroom.findUnique({
+      where: { id: classroomId },
+    })
+
+    if (!classroom) {
+      return errorResult(requestId, "NOT_FOUND", "Invalid classroom selection.")
+    }
+
+    if (participants > classroom.capacity) {
+      return errorResult(
+        requestId,
+        "CAPACITY_EXCEEDED",
+        `This classroom can only accommodate ${classroom.capacity} participants.`,
+      )
+    }
+
+    const ecaaApprovalFile = formData.get("ecaaApprovalFile") as File | null
+    const trainingOrderFile = formData.get("trainingOrderFile") as File | null
+
+    const trainingValidation = await validatePdfFile(trainingOrderFile, "Training order PDF file", requestId, true)
+    if (!trainingValidation.ok) return trainingValidation.result
+
+    const ecaaValidation = await validatePdfFile(
+      ecaaApprovalFile,
+      "ECAA approval PDF file",
+      requestId,
+      ecaaInstructorApproval,
+    )
+    if (!ecaaValidation.ok) return ecaaValidation.result
+
+    const uploadDir = join(process.cwd(), "uploads", "bookings")
+    await mkdir(uploadDir, { recursive: true })
+
+    let ecaaApprovalFilePath: string | null = null
+    let trainingOrderFilePath: string | null = null
+
+    if (ecaaValidation.buffer) {
+      const ecaaFileName = `ecaa-${user.id}-${Date.now()}.pdf`
+      const ecaaFilePath = join(uploadDir, ecaaFileName)
+      await writeFile(ecaaFilePath, ecaaValidation.buffer)
+      ecaaApprovalFilePath = `uploads/bookings/${ecaaFileName}`
+      createdFilePaths.push(ecaaApprovalFilePath)
+    }
+
+    if (trainingValidation.buffer) {
+      const trainingFileName = `training-${user.id}-${Date.now()}.pdf`
+      const trainingFilePath = join(uploadDir, trainingFileName)
+      await writeFile(trainingFilePath, trainingValidation.buffer)
+      trainingOrderFilePath = `uploads/bookings/${trainingFileName}`
+      createdFilePaths.push(trainingOrderFilePath)
+    }
+
+    if (isBulkBooking) {
+      const bulkBookingId = `bulk-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+
+      for (const dateKey of selectedDates) {
+        const bookingStartTime = applyTimeToDate(dateKey, startTime)
+        const bookingEndTime = applyTimeToDate(dateKey, endTime)
+
+        if (!bookingStartTime || !bookingEndTime) {
+          await cleanupCreatedFiles()
+          return errorResult(requestId, "INVALID_DATE", `Invalid bulk booking date provided: ${dateKey}`)
+        }
+
         const conflict = await checkBookingConflict(classroomId, bookingStartTime, bookingEndTime)
 
         if (conflict) {
@@ -302,27 +447,25 @@ export async function createBooking(formData: FormData) {
             hour: "2-digit",
             minute: "2-digit",
           })
-
-          if (conflict.isBulkBooking) {
-            throw new Error(
-              `Time slot conflicts with existing bulk booking on ${conflictDate} from ${conflictStartTime} to ${conflictEndTime}`,
-            )
-          } else {
-            throw new Error(
-              `Time slot conflicts with existing booking on ${conflictDate} from ${conflictStartTime} to ${conflictEndTime}`,
-            )
-          }
+          await cleanupCreatedFiles()
+          return errorResult(
+            requestId,
+            "BOOKING_CONFLICT",
+            `Time slot conflicts with existing booking on ${conflictDate} from ${conflictStartTime} to ${conflictEndTime}.`,
+          )
         }
       }
 
-      // Create a single booking record representing the bulk booking
-      // Store all selected dates in the purpose field with a special format
-      const bulkPurpose = `BULK_BOOKING:${selectedDates.join(",")}:${purpose}`
-
-      // Use the first date for the main booking record's start/end times
       const firstDate = selectedDates[0]
-      const firstBookingStartTime = new Date(`${firstDate}T${startTime.toTimeString().split(" ")[0]}`)
-      const firstBookingEndTime = new Date(`${firstDate}T${endTime.toTimeString().split(" ")[0]}`)
+      const firstBookingStartTime = applyTimeToDate(firstDate, startTime)
+      const firstBookingEndTime = applyTimeToDate(firstDate, endTime)
+
+      if (!firstBookingStartTime || !firstBookingEndTime) {
+        await cleanupCreatedFiles()
+        return errorResult(requestId, "INVALID_DATE", "Invalid booking date selected.")
+      }
+
+      const bulkPurpose = `BULK_BOOKING:${selectedDates.join(",")}:${purpose}`
 
       await prisma.booking.create({
         data: {
@@ -346,60 +489,59 @@ export async function createBooking(formData: FormData) {
       })
 
       revalidatePath("/dashboard")
-      return {
-        success: true,
-        message: `Bulk booking request for ${selectedDates.length} dates submitted successfully!`,
-      }
-    } else {
-      // Single booking - Enhanced conflict detection
-      const conflict = await checkBookingConflict(classroomId, startTime, endTime)
-
-      if (conflict) {
-        // Provide more detailed conflict information
-        const conflictDate = new Date(conflict.conflictDate).toLocaleDateString()
-        const conflictStartTime = conflict.conflictStartTime.toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-        const conflictEndTime = conflict.conflictEndTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-
-        if (conflict.isBulkBooking) {
-          throw new Error(
-            `Time slot conflicts with existing bulk booking on ${conflictDate} from ${conflictStartTime} to ${conflictEndTime}`,
-          )
-        } else {
-          throw new Error(
-            `Time slot conflicts with existing booking on ${conflictDate} from ${conflictStartTime} to ${conflictEndTime}`,
-          )
-        }
-      }
-
-      await prisma.booking.create({
-        data: {
-          userId: user.id,
-          classroomId,
-          startTime,
-          endTime,
-          purpose,
-          instructorName,
-          trainingOrder,
-          courseReference: courseReference || null,
-          department,
-          participants,
-          ecaaInstructorApproval,
-          ecaaApprovalNumber,
-          qualifications,
-          ecaaApprovalFile: ecaaApprovalFilePath,
-          trainingOrderFile: trainingOrderFilePath,
-        },
-      })
-
-      revalidatePath("/dashboard")
-      return { success: true, message: "Booking request submitted successfully!" }
+      return successResult(requestId, `Bulk booking request for ${selectedDates.length} dates submitted successfully.`)
     }
+
+    const conflict = await checkBookingConflict(classroomId, startTime, endTime)
+    if (conflict) {
+      const conflictDate = new Date(conflict.conflictDate).toLocaleDateString()
+      const conflictStartTime = conflict.conflictStartTime.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+      const conflictEndTime = conflict.conflictEndTime.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+      await cleanupCreatedFiles()
+      return errorResult(
+        requestId,
+        "BOOKING_CONFLICT",
+        `Time slot conflicts with existing booking on ${conflictDate} from ${conflictStartTime} to ${conflictEndTime}.`,
+      )
+    }
+
+    await prisma.booking.create({
+      data: {
+        userId: user.id,
+        classroomId,
+        startTime,
+        endTime,
+        purpose,
+        instructorName,
+        trainingOrder,
+        courseReference: courseReference || null,
+        department,
+        participants,
+        ecaaInstructorApproval,
+        ecaaApprovalNumber,
+        qualifications,
+        ecaaApprovalFile: ecaaApprovalFilePath,
+        trainingOrderFile: trainingOrderFilePath,
+      },
+    })
+
+    revalidatePath("/dashboard")
+    return successResult(requestId, "Booking request submitted successfully.")
   } catch (error) {
-    console.error("Database error:", error)
-    throw new Error("Failed to create booking. Please try again.")
+    await cleanupCreatedFiles()
+
+    logBookingError("createBooking", requestId, error)
+    return errorResult(
+      requestId,
+      "BOOKING_CREATE_FAILED",
+      "We couldn't create your booking right now. Please try again or contact support.",
+    )
   }
 }
 
@@ -621,11 +763,14 @@ export async function deleteBulkBooking(bulkBookingId: string) {
 }
 
 // New function to handle booking updates
-export async function editBooking(bookingId: string, formData: FormData) {
+export async function editBooking(bookingId: string, formData: FormData): Promise<BookingActionResult> {
+  const requestId = randomUUID()
+
+  try {
   const session = await getServerSession(authOptions)
 
   if (!session?.user?.email) {
-    throw new Error("Unauthorized - No session found")
+    return errorResult(requestId, "UNAUTHORIZED", "Your session has expired. Please sign in again.")
   }
 
   // Get the actual user from database using email
@@ -634,7 +779,7 @@ export async function editBooking(bookingId: string, formData: FormData) {
   })
 
   if (!user) {
-    throw new Error("User not found in database")
+    return errorResult(requestId, "UNAUTHORIZED", "Your account was not found. Please contact an administrator.")
   }
 
   // Get the existing booking
@@ -657,8 +802,8 @@ export async function editBooking(bookingId: string, formData: FormData) {
   }
 
   const classroomId = sanitizeInput((formData.get("classroomId") as string | null)?.trim() || "")
-  const startTimeRaw = formData.get("startTime") as string | null
-  const endTimeRaw = formData.get("endTime") as string | null
+  const startTimeRaw = sanitizeInput((formData.get("startTime") as string | null)?.trim() || "")
+  const endTimeRaw = sanitizeInput((formData.get("endTime") as string | null)?.trim() || "")
   const purpose = sanitizeInput((formData.get("purpose") as string | null)?.trim() || "")
   const instructorName = sanitizeInput((formData.get("instructorName") as string | null)?.trim() || "")
   const trainingOrder = sanitizeInput((formData.get("trainingOrder") as string | null)?.trim() || "")
@@ -669,7 +814,7 @@ export async function editBooking(bookingId: string, formData: FormData) {
 
   // Handle bulk booking
   const isBulkBooking = formData.get("isBulkBooking") === "true"
-  const selectedDates = formData.getAll("selectedDates") as string[]
+  const selectedDates = normalizeDateKeys(formData.getAll("selectedDates") as string[])
 
   if (ecaaInstructorApprovalRaw !== "true" && ecaaInstructorApprovalRaw !== "false") {
     throw new Error("Please select your ECAA instructor approval status")
@@ -722,30 +867,14 @@ export async function editBooking(bookingId: string, formData: FormData) {
     throw new Error("Qualifications are required if you don't have ECAA instructor approval")
   }
 
-  const validDepartments = [
-    "Cockpit Training",
-    "Cabin Crew",
-    "Station",
-    "OCC",
-    "Compliance",
-    "Safety",
-    "Security",
-    "Maintenance",
-    "Planning & Engineering",
-    "HR & Financial",
-    "Commercial & Planning",
-    "IT",
-    "Meetings",
-  ]
-
-  if (!validDepartments.includes(department)) {
+  if (!VALID_DEPARTMENTS.includes(department)) {
     throw new Error("Please select a valid department")
   }
 
-  const startTime = new Date(startTimeRaw)
-  const endTime = new Date(endTimeRaw)
+  const startTime = parseDateTimeLocal(startTimeRaw)
+  const endTime = parseDateTimeLocal(endTimeRaw)
 
-  if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
+  if (!startTime || !endTime) {
     throw new Error("Invalid date/time provided")
   }
 
@@ -773,8 +902,12 @@ export async function editBooking(bookingId: string, formData: FormData) {
   // Check for conflicts (excluding current booking)
   if (isBulkBooking && selectedDates.length > 0) {
     for (const dateStr of selectedDates) {
-      const bookingStartTime = new Date(`${dateStr}T${startTime.toTimeString().split(" ")[0]}`)
-      const bookingEndTime = new Date(`${dateStr}T${endTime.toTimeString().split(" ")[0]}`)
+      const bookingStartTime = applyTimeToDate(dateStr, startTime)
+      const bookingEndTime = applyTimeToDate(dateStr, endTime)
+
+      if (!bookingStartTime || !bookingEndTime) {
+        throw new Error("Invalid bulk booking date provided")
+      }
 
       const conflict = await checkBookingConflict(classroomId, bookingStartTime, bookingEndTime, bookingId)
 
@@ -856,12 +989,15 @@ export async function editBooking(bookingId: string, formData: FormData) {
     trainingOrderFilePath = `uploads/bookings/${trainingFileName}`
   }
 
-  try {
-    if (isBulkBooking && selectedDates.length > 0) {
+  if (isBulkBooking && selectedDates.length > 0) {
       const bulkPurpose = `BULK_BOOKING:${selectedDates.join(",")}:${purpose}`
       const firstDate = selectedDates[0]
-      const firstBookingStartTime = new Date(`${firstDate}T${startTime.toTimeString().split(" ")[0]}`)
-      const firstBookingEndTime = new Date(`${firstDate}T${endTime.toTimeString().split(" ")[0]}`)
+      const firstBookingStartTime = applyTimeToDate(firstDate, startTime)
+      const firstBookingEndTime = applyTimeToDate(firstDate, endTime)
+
+      if (!firstBookingStartTime || !firstBookingEndTime) {
+        throw new Error("Invalid bulk booking date provided")
+      }
 
       await prisma.booking.update({
         where: { id: bookingId },
@@ -885,37 +1021,40 @@ export async function editBooking(bookingId: string, formData: FormData) {
       })
 
       revalidatePath("/dashboard")
-      return {
-        success: true,
-        message: `Bulk booking updated successfully! Your request is now pending approval.`,
-      }
-    } else {
-      await prisma.booking.update({
-        where: { id: bookingId },
-        data: {
-          classroomId,
-          startTime,
-          endTime,
-          purpose,
-          instructorName,
-          trainingOrder,
-          courseReference: courseReference || null,
-          department,
-          participants,
-          ecaaInstructorApproval,
-          ecaaApprovalNumber,
-          qualifications,
-          ecaaApprovalFile: ecaaApprovalFilePath,
-          trainingOrderFile: trainingOrderFilePath,
-          status: "PENDING", // Reset status to PENDING after edit
-        },
-      })
+      return successResult(requestId, "Bulk booking updated successfully. Your request is now pending approval.")
+  }
 
-      revalidatePath("/dashboard")
-      return { success: true, message: "Booking updated successfully! Your request is now pending approval." }
-    }
+  await prisma.booking.update({
+    where: { id: bookingId },
+    data: {
+      classroomId,
+      startTime,
+      endTime,
+      purpose,
+      instructorName,
+      trainingOrder,
+      courseReference: courseReference || null,
+      department,
+      participants,
+      ecaaInstructorApproval,
+      ecaaApprovalNumber,
+      qualifications,
+      ecaaApprovalFile: ecaaApprovalFilePath,
+      trainingOrderFile: trainingOrderFilePath,
+      status: "PENDING", // Reset status to PENDING after edit
+    },
+  })
+
+  revalidatePath("/dashboard")
+  return successResult(requestId, "Booking updated successfully. Your request is now pending approval.")
   } catch (error) {
-    console.error("Database error:", error)
-    throw new Error("Failed to update booking. Please try again.")
+    logBookingError("editBooking", requestId, error, { bookingId })
+    return errorResult(
+      requestId,
+      "BOOKING_UPDATE_FAILED",
+      error instanceof Error
+        ? error.message
+        : "We couldn't update your booking right now. Please try again later.",
+    )
   }
 }

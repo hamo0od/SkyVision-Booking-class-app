@@ -40,8 +40,20 @@ interface TimelineData {
   classrooms: Classroom[]
 }
 
+function formatLocalDateKey(date: Date): string {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, "0")
+  const day = `${date.getDate()}`.padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+function parseLocalDateKey(dateKey: string): Date {
+  const [yearRaw, monthRaw, dayRaw] = dateKey.split("-")
+  return new Date(Number(yearRaw), Number(monthRaw) - 1, Number(dayRaw), 0, 0, 0, 0)
+}
+
 export function BookingTimeline() {
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0])
+  const [selectedDate, setSelectedDate] = useState(formatLocalDateKey(new Date()))
   const [timelineData, setTimelineData] = useState<TimelineData>({ bookings: [], classrooms: [] })
   const [isLoading, setIsLoading] = useState(true)
 
@@ -63,13 +75,13 @@ export function BookingTimeline() {
   }
 
   const changeDate = (days: number) => {
-    const newDate = new Date(selectedDate)
+    const newDate = parseLocalDateKey(selectedDate)
     newDate.setDate(newDate.getDate() + days)
-    setSelectedDate(newDate.toISOString().split("T")[0])
+    setSelectedDate(formatLocalDateKey(newDate))
   }
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
+    const date = parseLocalDateKey(dateString)
     return date.toLocaleDateString("en-US", {
       weekday: "long",
       year: "numeric",
@@ -79,7 +91,7 @@ export function BookingTimeline() {
   }
 
   const formatDateShort = (dateString: string) => {
-    const date = new Date(dateString)
+    const date = parseLocalDateKey(dateString)
     return date.toLocaleDateString("en-US", {
       weekday: "short",
       month: "short",
@@ -104,7 +116,7 @@ export function BookingTimeline() {
 
   const getBookingForSlot = (classroomId: string, timeSlot: string) => {
     const [hours, minutes] = timeSlot.split(":").map(Number)
-    const slotTime = new Date(selectedDate)
+    const slotTime = parseLocalDateKey(selectedDate)
     slotTime.setHours(hours, minutes, 0, 0)
 
     return timelineData.bookings.find((booking) => {

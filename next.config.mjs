@@ -17,7 +17,8 @@ const nextConfig = {
   },
   experimental: {
     serverActions: {
-      bodySizeLimit: '20mb',
+      // Two PDF uploads + multipart overhead can exceed 20mb.
+      bodySizeLimit: "30mb",
     },
   },
 }

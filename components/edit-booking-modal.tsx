@@ -146,18 +146,29 @@ export function EditBookingModal({ booking, isOpen, onClose, classrooms, onSucce
         formData.set("endTime", `2000-01-01T${endTime}:00`)
       }
 
-      try {
-        const result = await editBooking(booking.id, formData)
+      const result = await editBooking(booking.id, formData)
 
-        if (result.success) {
-          onClose()
-          onSuccess?.()
-        }
-      } catch (serverError: any) {
-        const errorMessage = serverError?.message || "Failed to update booking. Please try again."
-        console.error("[v0] Edit booking error:", serverError)
-        setError(errorMessage)
+      if (!result || typeof result.success !== "boolean") {
+        console.error("[edit-booking-modal] Invalid action response:", result)
+        setError("An unexpected response was received from the server. Please try again.")
+        return
       }
+
+      if (result.success) {
+        onClose()
+        onSuccess?.()
+      } else {
+        console.error("[edit-booking-modal] Booking update failed:", {
+          requestId: result.requestId,
+          errorCode: result.errorCode,
+          message: result.message,
+        })
+        const reference = result.requestId ? ` (Ref: ${result.requestId})` : ""
+        setError(`${result.message}${reference}`)
+      }
+    } catch (error) {
+      console.error("[edit-booking-modal] Unexpected edit booking error:", error)
+      setError("Something went wrong while updating your booking. Please try again.")
     } finally {
       setIsLoading(false)
     }

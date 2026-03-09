@@ -81,32 +81,43 @@ export function BookingForm({ classrooms }: BookingFormProps) {
         })
       }
 
-      try {
-        const result = await createBooking(formData)
+      const result = await createBooking(formData)
 
-        if (result.success) {
-          setIsSuccess(true)
-          // Reset form
-          const form = e.target as HTMLFormElement
-          form.reset()
-          setSelectedDate("")
-          setStartTime("")
-          setEndTime("")
-          setSelectedDates([])
-          setIsBulkBooking(false)
-          setEcaaInstructorApproval("true")
-          setFileErrors({ ecaa: "", trainingOrder: "" })
-
-          // Hide success message after 5 seconds
-          setTimeout(() => {
-            setIsSuccess(false)
-          }, 5000)
-        }
-      } catch (serverError: any) {
-        const errorMessage = serverError?.message || "Failed to create booking. Please try again."
-        console.error("[v0] Create booking error:", serverError)
-        setError(errorMessage)
+      if (!result || typeof result.success !== "boolean") {
+        console.error("[booking-form] Invalid action response:", result)
+        setError("An unexpected response was received from the server. Please try again.")
+        return
       }
+
+      if (result.success) {
+        setIsSuccess(true)
+        // Reset form
+        const form = e.target as HTMLFormElement
+        form.reset()
+        setSelectedDate("")
+        setStartTime("")
+        setEndTime("")
+        setSelectedDates([])
+        setIsBulkBooking(false)
+        setEcaaInstructorApproval("true")
+        setFileErrors({ ecaa: "", trainingOrder: "" })
+
+        // Hide success message after 5 seconds
+        setTimeout(() => {
+          setIsSuccess(false)
+        }, 5000)
+      } else {
+        console.error("[booking-form] Booking request failed:", {
+          requestId: result.requestId,
+          errorCode: result.errorCode,
+          message: result.message,
+        })
+        const reference = result.requestId ? ` (Ref: ${result.requestId})` : ""
+        setError(`${result.message}${reference}`)
+      }
+    } catch (error) {
+      console.error("[booking-form] Unexpected create booking error:", error)
+      setError("Something went wrong while submitting your booking. Please try again.")
     } finally {
       setIsLoading(false)
     }
