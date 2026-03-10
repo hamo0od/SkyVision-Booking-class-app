@@ -19,6 +19,7 @@ import {
   formatUploadSize,
   getBookingUploadValidationError,
 } from "@/lib/booking-upload"
+import { uploadBookingFileInChunks } from "@/lib/booking-upload-client"
 
 interface Classroom {
   id: string
@@ -171,6 +172,21 @@ export function EditBookingModal({ booking, isOpen, onClose, classrooms, onSucce
         return
       }
 
+      const ecaaApprovalFile = formData.get("ecaaApprovalFile") as File | null
+      const trainingOrderFile = formData.get("trainingOrderFile") as File | null
+
+      if (trainingOrderFile && trainingOrderFile.size > 0) {
+        const uploadToken = await uploadBookingFileInChunks({ file: trainingOrderFile })
+        formData.delete("trainingOrderFile")
+        formData.set("trainingOrderUploadToken", uploadToken)
+      }
+
+      if (ecaaApprovalFile && ecaaApprovalFile.size > 0) {
+        const uploadToken = await uploadBookingFileInChunks({ file: ecaaApprovalFile })
+        formData.delete("ecaaApprovalFile")
+        formData.set("ecaaApprovalUploadToken", uploadToken)
+      }
+
       const result = await editBooking(booking.id, formData)
 
       if (!result || typeof result.success !== "boolean") {
@@ -193,7 +209,7 @@ export function EditBookingModal({ booking, isOpen, onClose, classrooms, onSucce
       }
     } catch (error) {
       console.error("[edit-booking-modal] Unexpected edit booking error:", error)
-      setError("Something went wrong while updating your booking. Please try again.")
+      setError(error instanceof Error ? error.message : "Something went wrong while updating your booking. Please try again.")
     } finally {
       setIsLoading(false)
     }

@@ -19,6 +19,7 @@ import {
   formatUploadSize,
   getBookingUploadValidationError,
 } from "@/lib/booking-upload"
+import { uploadBookingFileInChunks } from "@/lib/booking-upload-client"
 
 interface Classroom {
   id: string
@@ -106,6 +107,21 @@ export function BookingForm({ classrooms }: BookingFormProps) {
         return
       }
 
+      const ecaaApprovalFile = formData.get("ecaaApprovalFile") as File | null
+      const trainingOrderFile = formData.get("trainingOrderFile") as File | null
+
+      if (trainingOrderFile && trainingOrderFile.size > 0) {
+        const uploadToken = await uploadBookingFileInChunks({ file: trainingOrderFile })
+        formData.delete("trainingOrderFile")
+        formData.set("trainingOrderUploadToken", uploadToken)
+      }
+
+      if (ecaaApprovalFile && ecaaApprovalFile.size > 0) {
+        const uploadToken = await uploadBookingFileInChunks({ file: ecaaApprovalFile })
+        formData.delete("ecaaApprovalFile")
+        formData.set("ecaaApprovalUploadToken", uploadToken)
+      }
+
       const result = await createBooking(formData)
 
       if (!result || typeof result.success !== "boolean") {
@@ -142,7 +158,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
       }
     } catch (error) {
       console.error("[booking-form] Unexpected create booking error:", error)
-      setError("Something went wrong while submitting your booking. Please try again.")
+      setError(error instanceof Error ? error.message : "Something went wrong while submitting your booking. Please try again.")
     } finally {
       setIsLoading(false)
     }

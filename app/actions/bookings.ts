@@ -9,10 +9,12 @@ import { join } from "path"
 import { randomUUID } from "crypto"
 import { sanitizeInput } from "@/lib/security"
 import {
+  MAX_TOTAL_BOOKING_UPLOAD_SIZE_BYTES,
   MAX_PDF_FILE_SIZE_BYTES,
   formatUploadSize,
   getBookingUploadValidationError,
 } from "@/lib/booking-upload"
+import { consumeBookingUpload } from "@/lib/booking-upload-server"
 
 type BookingActionResult = {
   success: boolean
@@ -178,6 +180,69 @@ async function validatePdfFile(
   return { ok: true, buffer }
 }
 
+async function validatePdfUpload(
+  file: File | null,
+  uploadToken: string | null,
+  fieldLabel: string,
+  requestId: string,
+  required: boolean,
+): Promise<
+  | { ok: true; buffer: Buffer | null; cleanup?: () => Promise<void> }
+  | { ok: false; result: BookingActionResult }
+> {
+  if (file && file.size > 0) {
+    return validatePdfFile(file, fieldLabel, requestId, required)
+  }
+
+  if (!uploadToken) {
+    if (required) {
+      return { ok: false, result: errorResult(requestId, "VALIDATION_ERROR", `${fieldLabel} is required`) }
+    }
+
+    return { ok: true, buffer: null }
+  }
+
+  try {
+    const uploadedFile = await consumeBookingUpload(uploadToken)
+    const lowerName = uploadedFile.fileName.toLowerCase()
+
+    if (!lowerName.endsWith(".pdf")) {
+      await uploadedFile.cleanup()
+      return { ok: false, result: errorResult(requestId, "VALIDATION_ERROR", `${fieldLabel} must be a PDF`) }
+    }
+
+    if (uploadedFile.buffer.length > MAX_PDF_FILE_SIZE_BYTES) {
+      await uploadedFile.cleanup()
+      return {
+        ok: false,
+        result: errorResult(
+          requestId,
+          "VALIDATION_ERROR",
+          `${fieldLabel} must be less than ${formatUploadSize(MAX_PDF_FILE_SIZE_BYTES)}`,
+        ),
+      }
+    }
+
+    const signature = uploadedFile.buffer.subarray(0, 5).toString("utf8")
+    if (signature !== "%PDF-") {
+      await uploadedFile.cleanup()
+      return { ok: false, result: errorResult(requestId, "VALIDATION_ERROR", `${fieldLabel} must be a valid PDF`) }
+    }
+
+    return {
+      ok: true,
+      buffer: uploadedFile.buffer,
+      cleanup: uploadedFile.cleanup,
+    }
+  } catch (error) {
+    logBookingError("validatePdfUpload", requestId, error, { fieldLabel })
+    return {
+      ok: false,
+      result: errorResult(requestId, "VALIDATION_ERROR", `We couldn't process the uploaded ${fieldLabel}. Please try again.`),
+    }
+  }
+}
+
 // Helper function to delete files
 async function deleteFile(filePath: string) {
   try {
@@ -285,11 +350,18 @@ async function checkBookingConflict(classroomId: string, startTime: Date, endTim
 export async function createBooking(formData: FormData): Promise<BookingActionResult> {
   const requestId = randomUUID()
   const createdFilePaths: string[] = []
+  const pendingUploadCleanups: Array<() => Promise<void>> = []
   const cleanupCreatedFiles = async () => {
     for (const filePath of createdFilePaths) {
       await deleteFile(filePath)
     }
     createdFilePaths.length = 0
+  }
+  const cleanupPendingUploads = async () => {
+    for (const cleanup of pendingUploadCleanups) {
+      await cleanup()
+    }
+    pendingUploadCleanups.length = 0
   }
 
   try {
@@ -393,6 +465,8 @@ export async function createBooking(formData: FormData): Promise<BookingActionRe
 
     const ecaaApprovalFile = formData.get("ecaaApprovalFile") as File | null
     const trainingOrderFile = formData.get("trainingOrderFile") as File | null
+    const ecaaApprovalUploadToken = (formData.get("ecaaApprovalUploadToken") as string | null)?.trim() || null
+    const trainingOrderUploadToken = (formData.get("trainingOrderUploadToken") as string | null)?.trim() || null
     const uploadValidationError = getBookingUploadValidationError([
       { file: ecaaApprovalFile, label: "ECAA approval PDF file" },
       { file: trainingOrderFile, label: "Training order PDF file" },
@@ -402,16 +476,38 @@ export async function createBooking(formData: FormData): Promise<BookingActionRe
       return errorResult(requestId, "VALIDATION_ERROR", uploadValidationError)
     }
 
-    const trainingValidation = await validatePdfFile(trainingOrderFile, "Training order PDF file", requestId, true)
+    const trainingValidation = await validatePdfUpload(
+      trainingOrderFile,
+      trainingOrderUploadToken,
+      "Training order PDF file",
+      requestId,
+      true,
+    )
     if (!trainingValidation.ok) return trainingValidation.result
+    if (trainingValidation.cleanup) pendingUploadCleanups.push(trainingValidation.cleanup)
 
-    const ecaaValidation = await validatePdfFile(
+    const ecaaValidation = await validatePdfUpload(
       ecaaApprovalFile,
+      ecaaApprovalUploadToken,
       "ECAA approval PDF file",
       requestId,
       ecaaInstructorApproval,
     )
-    if (!ecaaValidation.ok) return ecaaValidation.result
+    if (!ecaaValidation.ok) {
+      await cleanupPendingUploads()
+      return ecaaValidation.result
+    }
+    if (ecaaValidation.cleanup) pendingUploadCleanups.push(ecaaValidation.cleanup)
+
+    const totalUploadBytes = (trainingValidation.buffer?.length || 0) + (ecaaValidation.buffer?.length || 0)
+    if (totalUploadBytes > MAX_TOTAL_BOOKING_UPLOAD_SIZE_BYTES) {
+      await cleanupPendingUploads()
+      return errorResult(
+        requestId,
+        "VALIDATION_ERROR",
+        `The combined size of uploaded PDF files must be less than ${formatUploadSize(MAX_TOTAL_BOOKING_UPLOAD_SIZE_BYTES)}.`,
+      )
+    }
 
     const uploadDir = join(process.cwd(), "uploads", "bookings")
     await mkdir(uploadDir, { recursive: true })
@@ -434,6 +530,8 @@ export async function createBooking(formData: FormData): Promise<BookingActionRe
       trainingOrderFilePath = `uploads/bookings/${trainingFileName}`
       createdFilePaths.push(trainingOrderFilePath)
     }
+
+    await cleanupPendingUploads()
 
     if (isBulkBooking) {
       const bulkBookingId = `bulk-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
@@ -547,6 +645,7 @@ export async function createBooking(formData: FormData): Promise<BookingActionRe
     return successResult(requestId, "Booking request submitted successfully.")
   } catch (error) {
     await cleanupCreatedFiles()
+    await cleanupPendingUploads()
 
     logBookingError("createBooking", requestId, error)
     return errorResult(
@@ -777,6 +876,13 @@ export async function deleteBulkBooking(bulkBookingId: string) {
 // New function to handle booking updates
 export async function editBooking(bookingId: string, formData: FormData): Promise<BookingActionResult> {
   const requestId = randomUUID()
+  const pendingUploadCleanups: Array<() => Promise<void>> = []
+  const cleanupPendingUploads = async () => {
+    for (const cleanup of pendingUploadCleanups) {
+      await cleanup()
+    }
+    pendingUploadCleanups.length = 0
+  }
 
   try {
   const session = await getServerSession(authOptions)
@@ -843,6 +949,8 @@ export async function editBooking(bookingId: string, formData: FormData): Promis
   // Handle file uploads - Make files optional during editing
   const ecaaApprovalFile = formData.get("ecaaApprovalFile") as File | null
   const trainingOrderFile = formData.get("trainingOrderFile") as File | null
+  const ecaaApprovalUploadToken = (formData.get("ecaaApprovalUploadToken") as string | null)?.trim() || null
+  const trainingOrderUploadToken = (formData.get("trainingOrderUploadToken") as string | null)?.trim() || null
   const uploadValidationError = getBookingUploadValidationError([
     { file: ecaaApprovalFile, label: "ECAA approval PDF file" },
     { file: trainingOrderFile, label: "Training order PDF file" },
@@ -860,23 +968,37 @@ export async function editBooking(bookingId: string, formData: FormData): Promis
     throw new Error("Please select at least one date for bulk booking")
   }
 
-  // Only validate files if they were actually selected and have size > 0
-  if (trainingOrderFile && trainingOrderFile.size > 0) {
-    if (trainingOrderFile.type !== "application/pdf") {
-      throw new Error("Training order file must be a PDF")
-    }
-    if (trainingOrderFile.size > MAX_PDF_FILE_SIZE_BYTES) {
-      throw new Error(`Training order file must be less than ${formatUploadSize(MAX_PDF_FILE_SIZE_BYTES)}`)
-    }
+  const trainingValidation = await validatePdfUpload(
+    trainingOrderFile,
+    trainingOrderUploadToken,
+    "Training order PDF file",
+    requestId,
+    false,
+  )
+  if (!trainingValidation.ok) {
+    throw new Error(trainingValidation.result.message)
   }
+  if (trainingValidation.cleanup) pendingUploadCleanups.push(trainingValidation.cleanup)
 
-  if (ecaaApprovalFile && ecaaApprovalFile.size > 0) {
-    if (ecaaApprovalFile.type !== "application/pdf") {
-      throw new Error("ECAA approval file must be a PDF")
-    }
-    if (ecaaApprovalFile.size > MAX_PDF_FILE_SIZE_BYTES) {
-      throw new Error(`ECAA approval file must be less than ${formatUploadSize(MAX_PDF_FILE_SIZE_BYTES)}`)
-    }
+  const ecaaValidation = await validatePdfUpload(
+    ecaaApprovalFile,
+    ecaaApprovalUploadToken,
+    "ECAA approval PDF file",
+    requestId,
+    false,
+  )
+  if (!ecaaValidation.ok) {
+    await cleanupPendingUploads()
+    throw new Error(ecaaValidation.result.message)
+  }
+  if (ecaaValidation.cleanup) pendingUploadCleanups.push(ecaaValidation.cleanup)
+
+  const totalUploadBytes = (trainingValidation.buffer?.length || 0) + (ecaaValidation.buffer?.length || 0)
+  if (totalUploadBytes > MAX_TOTAL_BOOKING_UPLOAD_SIZE_BYTES) {
+    await cleanupPendingUploads()
+    throw new Error(
+      `The combined size of uploaded PDF files must be less than ${formatUploadSize(MAX_TOTAL_BOOKING_UPLOAD_SIZE_BYTES)}.`,
+    )
   }
 
   if (ecaaInstructorApproval && !ecaaApprovalNumber) {
@@ -988,6 +1110,9 @@ export async function editBooking(bookingId: string, formData: FormData): Promis
 
   // Delete old files if new ones are provided
   if (ecaaApprovalFile && ecaaApprovalFile.size > 0) {
+    if (ecaaApprovalFile.type !== "application/pdf") {
+      throw new Error("ECAA approval file must be a PDF")
+    }
     if (existingBooking.ecaaApprovalFile) {
       await deleteFile(existingBooking.ecaaApprovalFile)
     }
@@ -996,9 +1121,20 @@ export async function editBooking(bookingId: string, formData: FormData): Promis
     const ecaaBuffer = Buffer.from(await ecaaApprovalFile.arrayBuffer())
     await writeFile(ecaaFilePath, ecaaBuffer)
     ecaaApprovalFilePath = `uploads/bookings/${ecaaFileName}`
+  } else if (ecaaValidation.buffer) {
+    if (existingBooking.ecaaApprovalFile) {
+      await deleteFile(existingBooking.ecaaApprovalFile)
+    }
+    const ecaaFileName = `ecaa-${user.id}-${Date.now()}.pdf`
+    const ecaaFilePath = join(uploadDir, ecaaFileName)
+    await writeFile(ecaaFilePath, ecaaValidation.buffer)
+    ecaaApprovalFilePath = `uploads/bookings/${ecaaFileName}`
   }
 
   if (trainingOrderFile && trainingOrderFile.size > 0) {
+    if (trainingOrderFile.type !== "application/pdf") {
+      throw new Error("Training order file must be a PDF")
+    }
     if (existingBooking.trainingOrderFile) {
       await deleteFile(existingBooking.trainingOrderFile)
     }
@@ -1007,7 +1143,17 @@ export async function editBooking(bookingId: string, formData: FormData): Promis
     const trainingBuffer = Buffer.from(await trainingOrderFile.arrayBuffer())
     await writeFile(trainingFilePath, trainingBuffer)
     trainingOrderFilePath = `uploads/bookings/${trainingFileName}`
+  } else if (trainingValidation.buffer) {
+    if (existingBooking.trainingOrderFile) {
+      await deleteFile(existingBooking.trainingOrderFile)
+    }
+    const trainingFileName = `training-${user.id}-${Date.now()}.pdf`
+    const trainingFilePath = join(uploadDir, trainingFileName)
+    await writeFile(trainingFilePath, trainingValidation.buffer)
+    trainingOrderFilePath = `uploads/bookings/${trainingFileName}`
   }
+
+  await cleanupPendingUploads()
 
   if (isBulkBooking && selectedDates.length > 0) {
       const bulkPurpose = `BULK_BOOKING:${selectedDates.join(",")}:${purpose}`
@@ -1068,6 +1214,7 @@ export async function editBooking(bookingId: string, formData: FormData): Promis
   revalidatePath("/dashboard")
   return successResult(requestId, "Booking updated successfully. Your request is now pending approval.")
   } catch (error) {
+    await cleanupPendingUploads()
     logBookingError("editBooking", requestId, error, { bookingId })
     return errorResult(
       requestId,
