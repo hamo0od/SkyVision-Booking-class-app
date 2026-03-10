@@ -13,6 +13,12 @@ import { editBooking } from "@/app/actions/bookings"
 import { BulkDatePicker } from "./bulk-date-picker"
 import { SimpleDateTimePicker } from "./simple-date-time-picker"
 import { FileText, Upload, AlertCircle, Loader2 } from "lucide-react"
+import {
+  MAX_PDF_FILE_SIZE_BYTES,
+  MAX_TOTAL_BOOKING_UPLOAD_SIZE_BYTES,
+  formatUploadSize,
+  getBookingUploadValidationError,
+} from "@/lib/booking-upload"
 
 interface Classroom {
   id: string
@@ -57,6 +63,7 @@ export function EditBookingModal({ booking, isOpen, onClose, classrooms, onSucce
   const [selectedDates, setSelectedDates] = useState<string[]>([])
   const [ecaaInstructorApproval, setEcaaInstructorApproval] = useState("true")
   const [fileErrors, setFileErrors] = useState({ ecaa: "", trainingOrder: "" })
+  const [uploadError, setUploadError] = useState("")
 
   if (!booking) return null
 
@@ -104,6 +111,8 @@ export function EditBookingModal({ booking, isOpen, onClose, classrooms, onSucce
     e.preventDefault()
     setIsLoading(true)
     setError("")
+    setUploadError("")
+    setFileErrors({ ecaa: "", trainingOrder: "" })
 
     try {
       if (isBulkBooking) {
@@ -146,6 +155,22 @@ export function EditBookingModal({ booking, isOpen, onClose, classrooms, onSucce
         formData.set("endTime", `2000-01-01T${endTime}:00`)
       }
 
+      const uploadValidationError = getBookingUploadValidationError([
+        {
+          file: formData.get("ecaaApprovalFile") as File | null,
+          label: "ECAA approval PDF file",
+        },
+        {
+          file: formData.get("trainingOrderFile") as File | null,
+          label: "Training order PDF file",
+        },
+      ])
+
+      if (uploadValidationError) {
+        setError(uploadValidationError)
+        return
+      }
+
       const result = await editBooking(booking.id, formData)
 
       if (!result || typeof result.success !== "boolean") {
@@ -175,19 +200,48 @@ export function EditBookingModal({ booking, isOpen, onClose, classrooms, onSucce
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: "ecaa" | "trainingOrder") => {
-    const file = e.target.files?.[0]
-    if (file && file.size > 10 * 1024 * 1024) {
+    const input = e.currentTarget
+    const file = input.files?.[0] ?? null
+    const form = input.form
+    const ecaaFile =
+      type === "ecaa"
+        ? file
+        : ((form?.elements.namedItem("ecaaApprovalFile") as HTMLInputElement | null)?.files?.[0] ?? null)
+    const trainingOrderFile =
+      type === "trainingOrder"
+        ? file
+        : ((form?.elements.namedItem("trainingOrderFile") as HTMLInputElement | null)?.files?.[0] ?? null)
+
+    if (file && file.size > MAX_PDF_FILE_SIZE_BYTES) {
       setFileErrors((prevErrors) => ({
         ...prevErrors,
-        [type]: "File size exceeds 10MB",
+        [type]: `File size exceeds ${formatUploadSize(MAX_PDF_FILE_SIZE_BYTES)}`,
       }))
+      setUploadError("")
+      input.value = ""
     } else {
       setFileErrors((prevErrors) => ({
         ...prevErrors,
         [type]: "",
       }))
+
+      const combinedValidationError = getBookingUploadValidationError([
+        { file: ecaaFile, label: "ECAA approval PDF file" },
+        { file: trainingOrderFile, label: "Training order PDF file" },
+      ])
+
+      if (combinedValidationError) {
+        setUploadError(combinedValidationError)
+        input.value = ""
+        return
+      }
+
+      setUploadError("")
+      setError("")
     }
   }
+
+  const activeError = error || uploadError
 
   const calculateDuration = () => {
     if (!startTime || !endTime) return ""
@@ -220,9 +274,9 @@ export function EditBookingModal({ booking, isOpen, onClose, classrooms, onSucce
 
         <div className="overflow-y-auto flex-1 pr-4">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
+            {activeError && (
               <div className="p-4 bg-red-50 border border-red-200 rounded-md">
-                <p className="text-red-800 text-sm">{error}</p>
+                <p className="text-red-800 text-sm">{activeError}</p>
               </div>
             )}
 
@@ -501,6 +555,10 @@ export function EditBookingModal({ booking, isOpen, onClose, classrooms, onSucce
                         {fileErrors.ecaa}
                       </div>
                     )}
+                    <p className="text-xs text-gray-500">
+                      PDF only, max {formatUploadSize(MAX_PDF_FILE_SIZE_BYTES)} per file,{" "}
+                      {formatUploadSize(MAX_TOTAL_BOOKING_UPLOAD_SIZE_BYTES)} combined
+                    </p>
                   </div>
                 </div>
               )}
@@ -541,6 +599,10 @@ export function EditBookingModal({ booking, isOpen, onClose, classrooms, onSucce
                   {fileErrors.trainingOrder}
                 </div>
               )}
+              <p className="text-xs text-gray-500">
+                PDF only, max {formatUploadSize(MAX_PDF_FILE_SIZE_BYTES)} per file,{" "}
+                {formatUploadSize(MAX_TOTAL_BOOKING_UPLOAD_SIZE_BYTES)} combined
+              </p>
             </div>
 
             <div className="flex gap-3 justify-end pt-4 border-t">

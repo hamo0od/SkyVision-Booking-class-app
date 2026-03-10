@@ -8,6 +8,11 @@ import { writeFile, mkdir, unlink } from "fs/promises"
 import { join } from "path"
 import { randomUUID } from "crypto"
 import { sanitizeInput } from "@/lib/security"
+import {
+  MAX_PDF_FILE_SIZE_BYTES,
+  formatUploadSize,
+  getBookingUploadValidationError,
+} from "@/lib/booking-upload"
 
 type BookingActionResult = {
   success: boolean
@@ -16,7 +21,6 @@ type BookingActionResult = {
   errorCode?: string
 }
 
-const MAX_PDF_FILE_SIZE_BYTES = 10 * 1024 * 1024
 const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/
 const DATE_TIME_REGEX = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/
 const VALID_DEPARTMENTS = [
@@ -389,6 +393,14 @@ export async function createBooking(formData: FormData): Promise<BookingActionRe
 
     const ecaaApprovalFile = formData.get("ecaaApprovalFile") as File | null
     const trainingOrderFile = formData.get("trainingOrderFile") as File | null
+    const uploadValidationError = getBookingUploadValidationError([
+      { file: ecaaApprovalFile, label: "ECAA approval PDF file" },
+      { file: trainingOrderFile, label: "Training order PDF file" },
+    ])
+
+    if (uploadValidationError) {
+      return errorResult(requestId, "VALIDATION_ERROR", uploadValidationError)
+    }
 
     const trainingValidation = await validatePdfFile(trainingOrderFile, "Training order PDF file", requestId, true)
     if (!trainingValidation.ok) return trainingValidation.result
@@ -831,9 +843,17 @@ export async function editBooking(bookingId: string, formData: FormData): Promis
   // Handle file uploads - Make files optional during editing
   const ecaaApprovalFile = formData.get("ecaaApprovalFile") as File | null
   const trainingOrderFile = formData.get("trainingOrderFile") as File | null
+  const uploadValidationError = getBookingUploadValidationError([
+    { file: ecaaApprovalFile, label: "ECAA approval PDF file" },
+    { file: trainingOrderFile, label: "Training order PDF file" },
+  ])
 
   if (!classroomId || !startTimeRaw || !endTimeRaw || !purpose || !instructorName || !trainingOrder || !department) {
     throw new Error("All fields are required")
+  }
+
+  if (uploadValidationError) {
+    throw new Error(uploadValidationError)
   }
 
   if (isBulkBooking && selectedDates.length === 0) {
@@ -845,8 +865,8 @@ export async function editBooking(bookingId: string, formData: FormData): Promis
     if (trainingOrderFile.type !== "application/pdf") {
       throw new Error("Training order file must be a PDF")
     }
-    if (trainingOrderFile.size > 10 * 1024 * 1024) {
-      throw new Error("Training order file must be less than 10MB")
+    if (trainingOrderFile.size > MAX_PDF_FILE_SIZE_BYTES) {
+      throw new Error(`Training order file must be less than ${formatUploadSize(MAX_PDF_FILE_SIZE_BYTES)}`)
     }
   }
 
@@ -854,8 +874,8 @@ export async function editBooking(bookingId: string, formData: FormData): Promis
     if (ecaaApprovalFile.type !== "application/pdf") {
       throw new Error("ECAA approval file must be a PDF")
     }
-    if (ecaaApprovalFile.size > 10 * 1024 * 1024) {
-      throw new Error("ECAA approval file must be less than 10MB")
+    if (ecaaApprovalFile.size > MAX_PDF_FILE_SIZE_BYTES) {
+      throw new Error(`ECAA approval file must be less than ${formatUploadSize(MAX_PDF_FILE_SIZE_BYTES)}`)
     }
   }
 
