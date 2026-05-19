@@ -28,6 +28,14 @@ type ConsumedBookingUpload = {
   cleanup: () => Promise<void>
 }
 
+const UPLOAD_ID_REGEX = /^[a-f0-9-]{36}$/i
+
+function validateUploadId(uploadId: string) {
+  if (!UPLOAD_ID_REGEX.test(uploadId)) {
+    throw new Error("Invalid upload id")
+  }
+}
+
 function getTempUploadDir() {
   return join(process.cwd(), "uploads", "tmp", "bookings")
 }
@@ -80,6 +88,8 @@ export async function appendBookingUploadChunk({
   if (!uploadId) {
     throw new Error("Upload id is required")
   }
+
+  validateUploadId(uploadId)
 
   if (!fileName.toLowerCase().endsWith(".pdf")) {
     throw new Error("Only PDF uploads are supported")
@@ -148,6 +158,7 @@ export async function consumeBookingUpload(uploadToken: string): Promise<Consume
   if (!uploadId) {
     throw new Error("Invalid upload token")
   }
+  validateUploadId(uploadId)
 
   const manifest = await readManifest(uploadId)
   if (!manifest) {
@@ -181,6 +192,7 @@ export async function cleanupBookingUpload(uploadToken: string | null | undefine
   if (!uploadId) {
     return
   }
+  validateUploadId(uploadId)
 
   await cleanupUploadId(uploadId)
 }

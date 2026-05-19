@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/db"
 import bcrypt from "bcryptjs"
 import { revalidatePath } from "next/cache"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 import {
   sanitizeInput,
   validateEmail,
@@ -13,7 +15,26 @@ import {
 } from "@/lib/security"
 import { headers } from "next/headers"
 
+async function requireAdmin() {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.user?.email) {
+    throw new Error("Unauthorized")
+  }
+
+  const adminUser = await prisma.user.findUnique({
+    where: { email: session.user.email },
+    select: { role: true },
+  })
+
+  if (!adminUser || adminUser.role !== "ADMIN") {
+    throw new Error("Unauthorized - Admin access required")
+  }
+}
+
 export async function createUser(formData: FormData) {
+  await requireAdmin()
+
   // Get client IP for rate limiting
   const headersList = await headers()
   const forwarded = headersList.get("x-forwarded-for")
@@ -101,6 +122,8 @@ export async function createUser(formData: FormData) {
 }
 
 export async function updateUser(userId: string, formData: FormData) {
+  await requireAdmin()
+
   // Get client IP for rate limiting
   const headersList = await headers()
   const forwarded = headersList.get("x-forwarded-for")
@@ -125,7 +148,7 @@ export async function updateUser(userId: string, formData: FormData) {
     // Sanitize inputs
     const email = sanitizeInput(formData.get("email") as string) || currentUser.email
     const username = sanitizeInput(formData.get("username") as string) || currentUser.username
-    const name = sanitizeInput(formData.get("name") as string) || currentUser.name
+    const name = sanitizeInput(formData.get("name") as string) || currentUser.name || ""
     const role = sanitizeInput(formData.get("role") as string) || currentUser.role
     const password = formData.get("password") as string
 
@@ -214,6 +237,8 @@ export async function updateUser(userId: string, formData: FormData) {
 }
 
 export async function deleteUser(userId: string) {
+  await requireAdmin()
+
   // Get client IP for rate limiting
   const headersList = await headers()
   const forwarded = headersList.get("x-forwarded-for")
@@ -252,6 +277,8 @@ export async function deleteUser(userId: string) {
 }
 
 export async function getUsers() {
+  await requireAdmin()
+
   try {
     const users = await prisma.user.findMany({
       select: {

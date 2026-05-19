@@ -110,7 +110,7 @@ async function main() {
   })
 
   await runTest("assembles a multi-megabyte PDF from sub-1MB chunks", async () => {
-    const uploadId = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const uploadId = crypto.randomUUID()
     const pdfBuffer = Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(2 * 1024 * 1024, 65)])
     const totalChunks = Math.ceil(pdfBuffer.length / BOOKING_UPLOAD_CHUNK_SIZE_BYTES)
     let uploadToken = null

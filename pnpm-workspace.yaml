@@ -1,0 +1,10 @@
+minimumReleaseAgeExclude:
+  - postcss@8.5.15
+overrides:
+  brace-expansion@>=2.0.0 <2.0.3: 2.0.3
+  glob@>=10.2.0 <10.5.0: 10.5.0
+  minimatch@>=9.0.0 <9.0.7: 9.0.7
+  picomatch@<2.3.2: 2.3.2
+  picomatch@>=4.0.0 <4.0.4: 4.0.4
+  preact@>=10.26.5 <10.26.10: 10.26.10
+  yaml@>=2.0.0 <2.8.3: 2.8.3

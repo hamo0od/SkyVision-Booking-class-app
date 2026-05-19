@@ -61,7 +61,8 @@ export const authOptions: NextAuthOptions = {
           return {
             id: user.id,
             email: user.email,
-            name: user.name,
+            name: user.name ?? undefined,
+            username: user.username,
             role: user.role,
             tokenVersion: user.tokenVersion,
           }
@@ -79,6 +80,8 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
+        token.id = user.id
+        token.username = user.username
         token.role = user.role
         token.tokenVersion = user.tokenVersion
       }
@@ -93,11 +96,11 @@ export const authOptions: NextAuthOptions = {
 
           if (!dbUser || dbUser.tokenVersion !== token.tokenVersion) {
             console.log("Token version mismatch, invalidating session")
-            return null // This will invalidate the session
+            return null as never // NextAuth treats this as an invalidated session at runtime.
           }
         } catch (error) {
           console.error("Error checking token version:", error)
-          return null
+          return null as never
         }
       }
 
@@ -105,6 +108,8 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (token) {
+        session.user.id = token.id as string
+        session.user.username = token.username as string
         session.user.role = token.role as string
         session.user.tokenVersion = token.tokenVersion as number
       }

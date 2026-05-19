@@ -106,7 +106,7 @@ export function getClientIP(request: NextRequest): string {
     return realIP
   }
 
-  return request.ip || "unknown"
+  return "unknown"
 }
 
 export function isValidCSRFToken(token: string, expected: string): boolean {
