@@ -1,10 +1,10 @@
 "use client"
 
 import { updateBookingStatus, deleteBooking } from "@/app/actions/bookings"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Calendar, Clock, MapPin, FileText, User, Check, X, Trash2, Eye, CalendarDays, Building2 } from "lucide-react"
+import { Calendar, Check, Clock, Eye, FileText, MapPin, Trash2, User, X, CalendarDays, Building2 } from "lucide-react"
 import { useState } from "react"
 import { BookingDetailsModal } from "./booking-details-modal"
 
@@ -40,10 +40,18 @@ interface AdminBookingListProps {
   showActions: boolean
 }
 
+type StatusFilter = "ALL" | "PENDING" | "APPROVED" | "REJECTED"
+
+const statusFilters: StatusFilter[] = ["ALL", "PENDING", "APPROVED", "REJECTED"]
+
 export function AdminBookingList({ bookings, showActions }: AdminBookingListProps) {
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL")
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string; id: string } | null>(null)
+
+  const visibleBookings =
+    showActions || statusFilter === "ALL" ? bookings : bookings.filter((booking) => booking.status === statusFilter)
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -53,17 +61,6 @@ export function AdminBookingList({ bookings, showActions }: AdminBookingListProp
         return "bg-red-100 text-red-800 border-red-200"
       default:
         return "bg-yellow-100 text-yellow-800 border-yellow-200"
-    }
-  }
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "APPROVED":
-        return "✓"
-      case "REJECTED":
-        return "✗"
-      default:
-        return "⏳"
     }
   }
 
@@ -78,23 +75,37 @@ export function AdminBookingList({ bookings, showActions }: AdminBookingListProp
     return { dates, actualPurpose }
   }
 
+  const formatDate = (date: Date) => {
+    return new Date(date).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })
+  }
+
+  const formatTime = (date: Date) => {
+    return new Date(date).toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
   const handleStatusUpdate = async (bookingId: string, status: "APPROVED" | "REJECTED") => {
     try {
       await updateBookingStatus(bookingId, status)
       setMessage({
         type: "success",
-        text: `Booking ${status.toLowerCase()} successfully!`,
+        text: `Booking ${status.toLowerCase()} successfully.`,
         id: bookingId,
       })
 
-      // Clear message after 3 seconds
       setTimeout(() => {
         setMessage(null)
       }, 3000)
     } catch (error) {
       setMessage({
         type: "error",
-        text: "Failed to update booking status",
+        text: "Failed to update booking status.",
         id: bookingId,
       })
     }
@@ -114,12 +125,12 @@ export function AdminBookingList({ bookings, showActions }: AdminBookingListProp
 
   if (bookings.length === 0) {
     return (
-      <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50">
+      <Card className="shadow-sm border bg-white">
         <CardContent className="p-8 text-center">
-          <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
-            <Calendar className="h-8 w-8 text-gray-400" />
+          <div className="w-12 h-12 mx-auto mb-3 bg-gray-100 rounded-full flex items-center justify-center">
+            <Calendar className="h-6 w-6 text-gray-400" />
           </div>
-          <p className="text-gray-500 text-lg">No bookings found</p>
+          <p className="text-gray-500">No bookings found</p>
         </CardContent>
       </Card>
     )
@@ -127,181 +138,167 @@ export function AdminBookingList({ bookings, showActions }: AdminBookingListProp
 
   return (
     <>
-      <div className="space-y-4">
-        {bookings.map((booking) => {
-          const bulkInfo = getBulkBookingInfo(booking.purpose)
-          const displayPurpose = bulkInfo ? bulkInfo.actualPurpose : booking.purpose
+      {!showActions && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          {statusFilters.map((filter) => {
+            const count = filter === "ALL" ? bookings.length : bookings.filter((booking) => booking.status === filter).length
 
-          return (
-            <Card
-              key={booking.id}
-              className={`shadow-lg border-0 bg-gradient-to-br from-white to-gray-50 hover:shadow-xl transition-shadow duration-200 ${
-                isDeleting === booking.id ? "opacity-50 pointer-events-none" : ""
-              }`}
-            >
-              {message && message.id === booking.id && (
+            return (
+              <Button
+                key={filter}
+                type="button"
+                size="sm"
+                variant={statusFilter === filter ? "default" : "outline"}
+                onClick={() => setStatusFilter(filter)}
+                className={statusFilter === filter ? "bg-purple-600 hover:bg-purple-700" : "bg-white"}
+              >
+                {filter === "ALL" ? "All" : filter.charAt(0) + filter.slice(1).toLowerCase()}
+                <span className="ml-2 rounded-full bg-white/20 px-1.5 text-xs">{count}</span>
+              </Button>
+            )
+          })}
+        </div>
+      )}
+
+      {visibleBookings.length === 0 ? (
+        <Card className="shadow-sm border bg-white">
+          <CardContent className="p-6 text-center text-gray-500">No bookings match this filter.</CardContent>
+        </Card>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+          <div className="hidden lg:grid grid-cols-[1.2fr_1fr_1.1fr_1.3fr_auto] gap-4 border-b bg-gray-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            <span>Classroom</span>
+            <span>Requester</span>
+            <span>Date and Time</span>
+            <span>Purpose</span>
+            <span className="text-right">Actions</span>
+          </div>
+
+          <div className="divide-y divide-gray-100">
+            {visibleBookings.map((booking) => {
+              const bulkInfo = getBulkBookingInfo(booking.purpose)
+              const displayPurpose = bulkInfo ? bulkInfo.actualPurpose : booking.purpose
+              const previewDates = bulkInfo?.dates.slice(0, 3) ?? []
+
+              return (
                 <div
-                  className={`mx-4 mt-4 p-3 rounded-lg flex items-center gap-2 ${
-                    message.type === "success"
-                      ? "bg-green-50 text-green-800 border border-green-200"
-                      : "bg-red-50 text-red-800 border border-red-200"
+                  key={booking.id}
+                  className={`grid gap-3 px-4 py-4 lg:grid-cols-[1.2fr_1fr_1.1fr_1.3fr_auto] lg:items-center ${
+                    isDeleting === booking.id ? "opacity-50 pointer-events-none" : ""
                   }`}
                 >
-                  <span className="text-sm">{message.text}</span>
-                </div>
-              )}
-
-              <CardHeader className="pb-3">
-                <div className="flex justify-between items-start">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-blue-600" />
-                    {booking.classroom.name}
-                    {bulkInfo && (
-                      <Badge variant="outline" className="ml-2 flex items-center gap-1">
-                        <CalendarDays className="h-3 w-3" />
-                        Bulk ({bulkInfo.dates.length} dates)
-                      </Badge>
-                    )}
-                  </CardTitle>
-                  <Badge className={`${getStatusColor(booking.status)} font-medium`}>
-                    <span className="mr-1">{getStatusIcon(booking.status)}</span>
-                    {booking.status}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <User className="h-4 w-4" />
-                  <span className="font-medium">{booking.user.name || booking.user.email}</span>
-                </div>
-
-                {booking.department && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Building2 className="h-4 w-4" />
-                    <span className="font-medium">{booking.department}</span>
-                  </div>
-                )}
-
-                {bulkInfo ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <CalendarDays className="h-4 w-4" />
-                      <span className="font-medium">Bulk Booking Dates:</span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <MapPin className="h-4 w-4 text-blue-600" />
+                      <span className="truncate font-medium text-gray-900">{booking.classroom.name}</span>
+                      <Badge className={`${getStatusColor(booking.status)} border text-xs`}>{booking.status}</Badge>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 ml-6">
-                      {bulkInfo.dates.map((date, index) => (
-                        <span key={index} className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">
-                          {new Date(date).toLocaleDateString()}
+                    <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                      <span>{booking.participants} participants</span>
+                      {booking.department && (
+                        <span className="inline-flex items-center gap-1">
+                          <Building2 className="h-3 w-3" />
+                          {booking.department}
                         </span>
-                      ))}
+                      )}
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-600 ml-6">
-                      <Clock className="h-4 w-4" />
+                  </div>
+
+                  <div className="min-w-0 text-sm text-gray-700">
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-gray-400" />
+                      <span className="truncate font-medium">{booking.user.name || booking.user.email}</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 text-sm text-gray-700">
+                    {bulkInfo ? (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <CalendarDays className="h-4 w-4 text-gray-400" />
+                          <span>Bulk, {bulkInfo.dates.length} dates</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {previewDates.map((date) => (
+                            <span key={date} className="rounded border bg-blue-50 px-1.5 py-0.5 text-xs text-blue-700">
+                              {formatDate(new Date(date))}
+                            </span>
+                          ))}
+                          {bulkInfo.dates.length > previewDates.length && (
+                            <span className="rounded border bg-gray-50 px-1.5 py-0.5 text-xs text-gray-600">
+                              +{bulkInfo.dates.length - previewDates.length}
+                            </span>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-gray-400" />
+                        <span>{formatDate(booking.startTime)}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-gray-400" />
                       <span>
-                        {new Date(booking.startTime).toLocaleTimeString("en-US", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}{" "}
-                        -{" "}
-                        {new Date(booking.endTime).toLocaleTimeString("en-US", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                        {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
                       </span>
                     </div>
                   </div>
-                ) : (
-                  <>
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Calendar className="h-4 w-4" />
-                      <span className="font-medium">
-                        {new Date(booking.startTime).toLocaleDateString("en-US", {
-                          weekday: "long",
-                          year: "numeric",
-                          month: "long",
-                          day: "numeric",
-                        })}
-                      </span>
+
+                  <div className="min-w-0 text-sm text-gray-700">
+                    <div className="flex items-start gap-2">
+                      <FileText className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                      <span className="line-clamp-2">{displayPurpose}</span>
                     </div>
+                    {message && message.id === booking.id && (
+                      <p className={message.type === "success" ? "mt-2 text-xs text-green-700" : "mt-2 text-xs text-red-700"}>
+                        {message.text}
+                      </p>
+                    )}
+                  </div>
 
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Clock className="h-4 w-4" />
-                      <span>
-                        {new Date(booking.startTime).toLocaleTimeString("en-US", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}{" "}
-                        -{" "}
-                        {new Date(booking.endTime).toLocaleTimeString("en-US", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    </div>
-                  </>
-                )}
+                  <div className="flex flex-wrap gap-2 lg:justify-end">
+                    <Button size="sm" variant="outline" onClick={() => setSelectedBooking(booking)}>
+                      <Eye className="h-4 w-4 mr-1" />
+                      Details
+                    </Button>
 
-                <div className="flex items-start gap-2 text-sm text-gray-600">
-                  <FileText className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                  <span className="line-clamp-2">{displayPurpose}</span>
+                    {showActions && booking.status === "PENDING" && (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() => handleStatusUpdate(booking.id, "APPROVED")}
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          <Check className="h-4 w-4 mr-1" />
+                          Approve
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={() => handleStatusUpdate(booking.id, "REJECTED")}>
+                          <X className="h-4 w-4 mr-1" />
+                          Reject
+                        </Button>
+                      </>
+                    )}
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDeleteBooking(booking.id)}
+                      className="border-red-200 text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete
+                    </Button>
+                  </div>
                 </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
-                <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setSelectedBooking(booking)}
-                    className="flex-1 sm:flex-none"
-                  >
-                    <Eye className="h-4 w-4 mr-1" />
-                    View Details
-                  </Button>
-
-                  {showActions && booking.status === "PENDING" && (
-                    <>
-                      <Button
-                        size="sm"
-                        onClick={() => handleStatusUpdate(booking.id, "APPROVED")}
-                        className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white"
-                      >
-                        <Check className="h-4 w-4 mr-1" />
-                        Approve
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => handleStatusUpdate(booking.id, "REJECTED")}
-                        className="flex-1 sm:flex-none"
-                      >
-                        <X className="h-4 w-4 mr-1" />
-                        Reject
-                      </Button>
-                    </>
-                  )}
-
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleDeleteBooking(booking.id)}
-                    className="flex-1 sm:flex-none border-red-200 text-red-600 hover:bg-red-50"
-                  >
-                    <Trash2 className="h-4 w-4 mr-1" />
-                    Delete
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
-
-      {/* Booking Details Modal */}
       {selectedBooking && (
-        <BookingDetailsModal
-          booking={selectedBooking}
-          isOpen={!!selectedBooking}
-          onClose={() => setSelectedBooking(null)}
-        />
+        <BookingDetailsModal booking={selectedBooking} isOpen={!!selectedBooking} onClose={() => setSelectedBooking(null)} />
       )}
     </>
   )

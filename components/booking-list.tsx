@@ -39,7 +39,7 @@ interface Booking {
   ecaaApprovalFile: string | null
   trainingOrderFile: string | null
   bulkBookingId: string | null
-  user: User
+  user?: User
   classroom: Classroom
 }
 
@@ -47,12 +47,21 @@ interface BookingListProps {
   bookings: Booking[]
   showUserInfo?: boolean
   classrooms?: Classroom[]
+  initialVisibleCount?: number
+  visibleIncrement?: number
 }
 
-export function BookingList({ bookings, showUserInfo = false, classrooms = [] }: BookingListProps) {
+export function BookingList({
+  bookings,
+  showUserInfo = false,
+  classrooms = [],
+  initialVisibleCount,
+  visibleIncrement = 5,
+}: BookingListProps) {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null)
   const [cancellingBookings, setCancellingBookings] = useState<Set<string>>(new Set())
+  const [visibleCount, setVisibleCount] = useState(initialVisibleCount ?? bookings.length)
 
   const handleCancelBooking = async (bookingId: string) => {
     if (!confirm("Are you sure you want to cancel this booking?")) {
@@ -154,9 +163,13 @@ export function BookingList({ bookings, showUserInfo = false, classrooms = [] }:
     )
   }
 
+  const visibleBookings = bookings.slice(0, visibleCount)
+  const remainingBookings = Math.max(bookings.length - visibleCount, 0)
+  const nextVisibleCount = Math.min(visibleCount + visibleIncrement, bookings.length)
+
   return (
     <div className="space-y-4">
-      {bookings.map((booking) => (
+      {visibleBookings.map((booking) => (
         <Card key={booking.id} className="hover:shadow-md transition-shadow">
           <CardHeader className="pb-3">
             <div className="flex items-start justify-between">
@@ -164,7 +177,7 @@ export function BookingList({ bookings, showUserInfo = false, classrooms = [] }:
                 <CardTitle className="text-lg font-semibold text-gray-900 line-clamp-2">
                   {getDisplayTitle(booking)}
                 </CardTitle>
-                {showUserInfo && (
+                {showUserInfo && booking.user && (
                   <CardDescription className="flex items-center gap-2">
                     <Users className="h-4 w-4" />
                     {booking.user.name || booking.user.email}
@@ -274,12 +287,22 @@ export function BookingList({ bookings, showUserInfo = false, classrooms = [] }:
         </Card>
       ))}
 
+      {remainingBookings > 0 && (
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full border-blue-200 text-blue-700 hover:bg-blue-50"
+          onClick={() => setVisibleCount(nextVisibleCount)}
+        >
+          View {Math.min(visibleIncrement, remainingBookings)} more bookings
+        </Button>
+      )}
+
       {selectedBooking && (
         <BookingDetailsModal
           booking={selectedBooking}
           isOpen={!!selectedBooking}
           onClose={() => setSelectedBooking(null)}
-          showUserInfo={showUserInfo}
         />
       )}
 

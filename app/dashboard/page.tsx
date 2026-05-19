@@ -83,7 +83,7 @@ export default async function Dashboard() {
             </div>
             <div className="w-full">
               <h2 className="text-xl sm:text-2xl font-bold mb-4 lg:mb-6 text-gray-800">Your Bookings</h2>
-              <BookingList bookings={userBookings} classrooms={classrooms} />
+              <BookingList bookings={userBookings} classrooms={classrooms} initialVisibleCount={5} visibleIncrement={5} />
             </div>
           </div>
 

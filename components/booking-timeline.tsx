@@ -24,8 +24,8 @@ interface Booking {
   }
   participants?: number
   ecaaApproval?: boolean
-  approvalNumber?: string
-  qualifications?: string
+  approvalNumber?: string | null
+  qualifications?: string | null
 }
 
 interface Classroom {
