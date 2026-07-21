@@ -35,7 +35,7 @@ interface Booking {
   instructorName: string
   trainingOrder: string
   courseReference: string | null
-  department: string
+  department: string | null
   participants: number
   status: "PENDING" | "APPROVED" | "REJECTED"
   ecaaInstructorApproval: boolean
@@ -439,7 +439,7 @@ export function EditBookingModal({ booking, isOpen, onClose, classrooms, onSucce
 
             <div className="space-y-3">
               <Label htmlFor="department">Department *</Label>
-              <Select name="department" defaultValue={booking.department}>
+              <Select name="department" defaultValue={booking.department ?? undefined}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select your department" />
                 </SelectTrigger>

@@ -29,7 +29,7 @@ interface Booking {
   instructorName: string
   trainingOrder: string
   courseReference: string | null
-  department: string
+  department: string | null
   participants: number
   status: "PENDING" | "APPROVED" | "REJECTED"
   createdAt: Date
@@ -238,7 +238,7 @@ export function BookingList({
 
             <div className="flex items-center gap-2 text-xs text-gray-500 mt-3">
               <FileText className="h-3 w-3" />
-              <span>{booking.department}</span>
+              <span>{booking.department || "Department not set"}</span>
               <span>•</span>
               <span>Submitted {formatDate(booking.createdAt)}</span>
             </div>
