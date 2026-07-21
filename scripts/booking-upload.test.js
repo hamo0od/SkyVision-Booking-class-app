@@ -120,6 +120,7 @@ async function main() {
         const start = chunkIndex * BOOKING_UPLOAD_CHUNK_SIZE_BYTES
         const end = Math.min(start + BOOKING_UPLOAD_CHUNK_SIZE_BYTES, pdfBuffer.length)
         const result = await appendBookingUploadChunk({
+          ownerId: "test-user",
           uploadId,
           fileName: "proof.pdf",
           mimeType: "application/pdf",
@@ -138,7 +139,7 @@ async function main() {
       }
 
       assert.ok(uploadToken)
-      const uploadedFile = await consumeBookingUpload(uploadToken)
+      const uploadedFile = await consumeBookingUpload(uploadToken, "test-user")
       assert.equal(uploadedFile.fileName, "proof.pdf")
       assert.deepEqual(uploadedFile.buffer, pdfBuffer)
       await uploadedFile.cleanup()
@@ -146,6 +147,41 @@ async function main() {
     } finally {
       await cleanupBookingUpload(uploadToken)
     }
+  })
+
+  await runTest("rejects a token consumed by a different user", async () => {
+    const uploadId = crypto.randomUUID()
+    let uploadToken = null
+    try {
+      const result = await appendBookingUploadChunk({
+        ownerId: "owner-a",
+        uploadId,
+        fileName: "proof.pdf",
+        mimeType: "application/pdf",
+        totalChunks: 1,
+        chunkIndex: 0,
+        chunk: Buffer.from("%PDF-1.4\n"),
+      })
+      uploadToken = result.uploadToken
+      await assert.rejects(() => consumeBookingUpload(uploadToken, "owner-b"), /does not belong/)
+    } finally {
+      await cleanupBookingUpload(uploadToken)
+    }
+  })
+
+  await runTest("rejects chunks larger than the configured chunk size", async () => {
+    await assert.rejects(
+      () => appendBookingUploadChunk({
+        ownerId: "test-user",
+        uploadId: crypto.randomUUID(),
+        fileName: "proof.pdf",
+        mimeType: "application/pdf",
+        totalChunks: 1,
+        chunkIndex: 0,
+        chunk: Buffer.concat([Buffer.from("%PDF-"), Buffer.alloc(BOOKING_UPLOAD_CHUNK_SIZE_BYTES)]),
+      }),
+      /chunk size/,
+    )
   })
 
   console.log("All booking upload tests passed.")

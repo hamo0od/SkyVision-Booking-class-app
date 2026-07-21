@@ -1,0 +1,25 @@
+[Unit]
+Description=SkyVision classroom booking application
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=skyvision
+Group=skyvision
+WorkingDirectory=/var/www/skyvision/app
+Environment=NODE_ENV=production
+Environment=PORT=3000
+EnvironmentFile=/etc/skyvision/skyvision.env
+ExecStart=/usr/bin/npm run start
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/www/skyvision/app/uploads /var/www/skyvision/app/.next/cache
+
+[Install]
+WantedBy=multi-user.target

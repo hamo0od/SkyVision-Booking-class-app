@@ -81,9 +81,9 @@ export function ChangePasswordForm() {
                 id="newPassword"
                 name="newPassword"
                 required
-                minLength={6}
+                minLength={12}
                 className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                placeholder="Enter new password (min 6 characters)"
+                placeholder="Enter new password (min 12 characters)"
               />
               <button
                 type="button"
@@ -106,7 +106,7 @@ export function ChangePasswordForm() {
                 id="confirmPassword"
                 name="confirmPassword"
                 required
-                minLength={6}
+                minLength={12}
                 className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                 placeholder="Confirm new password"
               />

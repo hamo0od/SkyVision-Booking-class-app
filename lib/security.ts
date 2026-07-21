@@ -83,7 +83,7 @@ export function validateName(name: string): boolean {
 }
 
 export function validatePassword(password: string): boolean {
-  return password.length >= 6 && password.length <= 128
+  return password.length >= 12 && password.length <= 128
 }
 
 export function validateClassroomName(name: string): boolean {

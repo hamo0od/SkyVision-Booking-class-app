@@ -1,6 +1,8 @@
 "use server"
 
 import { prisma } from "@/lib/db"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 
 const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/
 
@@ -25,6 +27,11 @@ function parseDateKeyLocal(dateKey: string): Date | null {
 
 export async function getTimelineBookings(selectedDate: string) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.email) {
+      return { bookings: [], classrooms: [] }
+    }
+
     const localDate = parseDateKeyLocal(selectedDate)
     if (!localDate) {
       return {

@@ -1,6 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
+import type { Prisma } from "@prisma/client"
 import bcrypt from "bcryptjs"
 import { revalidatePath } from "next/cache"
 import { getServerSession } from "next-auth"
@@ -24,12 +25,14 @@ async function requireAdmin() {
 
   const adminUser = await prisma.user.findUnique({
     where: { email: session.user.email },
-    select: { role: true },
+    select: { id: true, email: true, role: true },
   })
 
   if (!adminUser || adminUser.role !== "ADMIN") {
     throw new Error("Unauthorized - Admin access required")
   }
+
+  return adminUser
 }
 
 export async function createUser(formData: FormData) {
@@ -71,7 +74,7 @@ export async function createUser(formData: FormData) {
   }
 
   if (!validatePassword(password)) {
-    throw new Error("Password must be 6-128 characters long")
+    throw new Error("Password must be 12-128 characters long")
   }
 
   if (!["USER", "ADMIN"].includes(role)) {
@@ -195,7 +198,7 @@ export async function updateUser(userId: string, formData: FormData) {
     }
 
     // Prepare update data
-    const updateData: any = {
+    const updateData: Prisma.UserUpdateInput = {
       email,
       username,
       name,
@@ -206,7 +209,7 @@ export async function updateUser(userId: string, formData: FormData) {
     let passwordChanged = false
     if (password && password.trim() !== "") {
       if (!validatePassword(password)) {
-        throw new Error("Password must be 6-128 characters long")
+        throw new Error("Password must be 12-128 characters long")
       }
 
       updateData.password = await bcrypt.hash(password, 12)
@@ -237,7 +240,7 @@ export async function updateUser(userId: string, formData: FormData) {
 }
 
 export async function deleteUser(userId: string) {
-  await requireAdmin()
+  const currentAdmin = await requireAdmin()
 
   // Get client IP for rate limiting
   const headersList = await headers()
@@ -260,7 +263,15 @@ export async function deleteUser(userId: string) {
       throw new Error("User not found")
     }
 
-    // Delete user (this will cascade delete bookings due to foreign key constraint)
+    if (user.id === currentAdmin.id) {
+      throw new Error("You cannot delete your own administrator account")
+    }
+
+    if (user.role === "ADMIN" && (await prisma.user.count({ where: { role: "ADMIN" } })) <= 1) {
+      throw new Error("The last administrator account cannot be deleted")
+    }
+
+    // Delete user and their bookings through the database cascade.
     await prisma.user.delete({
       where: { id: userId },
     })

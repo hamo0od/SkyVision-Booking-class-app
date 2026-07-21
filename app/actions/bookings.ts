@@ -1,6 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
+import type { Prisma } from "@prisma/client"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
@@ -25,8 +26,17 @@ type BookingActionResult = {
 
 const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/
 const DATE_TIME_REGEX = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/
-const VALID_DEPARTMENTS = [
-  "Cockpit Training",
+const MAX_BULK_BOOKING_DATES = 366
+const BOOKING_TEXT_LIMITS = {
+  purpose: 500,
+  instructorName: 100,
+  trainingOrder: 100,
+  courseReference: 100,
+  ecaaApprovalNumber: 100,
+  qualifications: 2000,
+} as const
+
+const VALID_DEPARTMENTS = [  "Cockpit Training",
   "Cabin Crew",
   "Station",
   "OCC",
@@ -41,8 +51,15 @@ const VALID_DEPARTMENTS = [
   "Meetings",
 ]
 
-function successResult(requestId: string, message: string): BookingActionResult {
-  return { success: true, message, requestId }
+function validateBookingTextLengths(fields: Record<keyof typeof BOOKING_TEXT_LIMITS, string | null>): string | null {
+  for (const [field, limit] of Object.entries(BOOKING_TEXT_LIMITS)) {
+    const value = fields[field as keyof typeof BOOKING_TEXT_LIMITS]
+    if (value && value.length > limit) return `${field} must be ${limit} characters or fewer.`
+  }
+  return null
+}
+
+function successResult(requestId: string, message: string): BookingActionResult {  return { success: true, message, requestId }
 }
 
 function errorResult(requestId: string, errorCode: string, message: string): BookingActionResult {
@@ -186,6 +203,7 @@ async function validatePdfUpload(
   fieldLabel: string,
   requestId: string,
   required: boolean,
+  ownerId: string,
 ): Promise<
   | { ok: true; buffer: Buffer | null; cleanup?: () => Promise<void> }
   | { ok: false; result: BookingActionResult }
@@ -203,7 +221,7 @@ async function validatePdfUpload(
   }
 
   try {
-    const uploadedFile = await consumeBookingUpload(uploadToken)
+    const uploadedFile = await consumeBookingUpload(uploadToken, ownerId)
     const lowerName = uploadedFile.fileName.toLowerCase()
 
     if (!lowerName.endsWith(".pdf")) {
@@ -276,7 +294,7 @@ function timeRangesOverlap(start1: Date, end1: Date, start2: Date, end2: Date): 
 
 // Helper function to check for booking conflicts
 async function checkBookingConflict(classroomId: string, startTime: Date, endTime: Date, excludeBookingId?: string) {
-  const whereClause: any = {
+  const whereClause: Prisma.BookingWhereInput = {
     classroomId,
     status: { in: ["PENDING", "APPROVED"] },
   }
@@ -424,6 +442,16 @@ export async function createBooking(formData: FormData): Promise<BookingActionRe
       )
     }
 
+    const textLengthError = validateBookingTextLengths({
+      purpose,
+      instructorName,
+      trainingOrder,
+      courseReference: courseReference || null,
+      ecaaApprovalNumber,
+      qualifications,
+    })
+    if (textLengthError) return errorResult(requestId, "VALIDATION_ERROR", textLengthError)
+
     const startTime = parseDateTimeLocal(startTimeRaw)
     const endTime = parseDateTimeLocal(endTimeRaw)
 
@@ -441,6 +469,15 @@ export async function createBooking(formData: FormData): Promise<BookingActionRe
 
     if (isBulkBooking && selectedDates.length === 0) {
       return errorResult(requestId, "VALIDATION_ERROR", "Please select at least one date for bulk booking.")
+    }
+
+    if (selectedDates.length > MAX_BULK_BOOKING_DATES) {
+      return errorResult(requestId, "VALIDATION_ERROR", `Bulk bookings are limited to ${MAX_BULK_BOOKING_DATES} dates.`)
+    }
+
+    const todayKey = formatDateKey(new Date())
+    if (isBulkBooking && selectedDates.some((dateKey) => dateKey < todayKey)) {
+      return errorResult(requestId, "VALIDATION_ERROR", "Bulk booking dates cannot be in the past.")
     }
 
     if (!Number.isInteger(participants) || participants < 1) {
@@ -482,6 +519,7 @@ export async function createBooking(formData: FormData): Promise<BookingActionRe
       "Training order PDF file",
       requestId,
       true,
+      user.id,
     )
     if (!trainingValidation.ok) return trainingValidation.result
     if (trainingValidation.cleanup) pendingUploadCleanups.push(trainingValidation.cleanup)
@@ -492,6 +530,7 @@ export async function createBooking(formData: FormData): Promise<BookingActionRe
       "ECAA approval PDF file",
       requestId,
       ecaaInstructorApproval,
+      user.id,
     )
     if (!ecaaValidation.ok) {
       await cleanupPendingUploads()
@@ -968,12 +1007,21 @@ export async function editBooking(bookingId: string, formData: FormData): Promis
     throw new Error("Please select at least one date for bulk booking")
   }
 
+  if (selectedDates.length > MAX_BULK_BOOKING_DATES) {
+    throw new Error(`Bulk bookings are limited to ${MAX_BULK_BOOKING_DATES} dates`)
+  }
+
+  if (isBulkBooking && selectedDates.some((dateKey) => dateKey < formatDateKey(new Date()))) {
+    throw new Error("Bulk booking dates cannot be in the past")
+  }
+
   const trainingValidation = await validatePdfUpload(
     trainingOrderFile,
     trainingOrderUploadToken,
     "Training order PDF file",
     requestId,
     false,
+    user.id,
   )
   if (!trainingValidation.ok) {
     throw new Error(trainingValidation.result.message)
@@ -986,6 +1034,7 @@ export async function editBooking(bookingId: string, formData: FormData): Promis
     "ECAA approval PDF file",
     requestId,
     false,
+    user.id,
   )
   if (!ecaaValidation.ok) {
     await cleanupPendingUploads()
@@ -1009,6 +1058,16 @@ export async function editBooking(bookingId: string, formData: FormData): Promis
     throw new Error("Qualifications are required if you don't have ECAA instructor approval")
   }
 
+  const textLengthError = validateBookingTextLengths({
+    purpose,
+    instructorName,
+    trainingOrder,
+    courseReference: courseReference || null,
+    ecaaApprovalNumber,
+    qualifications,
+  })
+  if (textLengthError) throw new Error(textLengthError)
+
   if (!VALID_DEPARTMENTS.includes(department)) {
     throw new Error("Please select a valid department")
   }
@@ -1024,7 +1083,7 @@ export async function editBooking(bookingId: string, formData: FormData): Promis
     throw new Error("End time must be after start time")
   }
 
-  if (participants < 1) {
+  if (!Number.isInteger(participants) || participants < 1) {
     throw new Error("Number of participants must be at least 1")
   }
 

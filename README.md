@@ -1,30 +1,30 @@
-# Class Room Booking App
+# SkyVision Classroom Booking
 
-*Automatically synced with your [v0.dev](https://v0.dev) deployments*
+A Next.js and PostgreSQL classroom booking application with credential authentication, role-based administration, booking approval, timelines, and protected PDF attachments.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/sky-vision/v0-class-room-booking-app)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.dev-black?style=for-the-badge)](https://v0.dev/chat/projects/wiEIcsqAZta)
+## Local development
 
-## Overview
+Use Node.js 20.9 or newer and PostgreSQL. Create `.env` from `.env.example`, then run:
 
-This repository will stay in sync with your deployed chats on [v0.dev](https://v0.dev).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.dev](https://v0.dev).
+```bash
+npm ci
+npm run db:migrate
+npm run db:seed
+npm run dev
+```
 
-## Deployment
+The application is available at `http://localhost:3000`.
 
-Your project is live at:
+## Checks
 
-**[https://vercel.com/sky-vision/v0-class-room-booking-app](https://vercel.com/sky-vision/v0-class-room-booking-app)**
+```bash
+npm run typecheck
+npm run lint
+npm run test:booking-upload
+npm run build
+npm audit
+```
 
-## Build your app
+## Ubuntu VPS deployment
 
-Continue building your app on:
-
-**[https://v0.dev/chat/projects/wiEIcsqAZta](https://v0.dev/chat/projects/wiEIcsqAZta)**
-
-## How It Works
-
-1. Create and modify your project using [v0.dev](https://v0.dev)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+Use the reviewed systemd and Nginx configuration in [deploy/README.md](deploy/README.md). It covers PostgreSQL migrations, secrets, TLS certificates, request limits, service isolation, updates, and rollback.

@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db"
 import bcrypt from "bcryptjs"
 import { rateLimit, sanitizeInput } from "@/lib/security"
 
+const DUMMY_PASSWORD_HASH = "$2a$12$NCo2KRcWT4FtZGfW76nRUuav0hJDcfplQNEgFLZ6F0SfI4tFlMhyG"
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -13,25 +15,17 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials, req) {
-        if (!credentials?.username || !credentials?.password) {
-          console.log("Missing credentials")
-          return null
-        }
+        if (!credentials?.username || !credentials?.password) return null
 
         // Rate limiting
         const clientIP = req?.headers?.["x-forwarded-for"] || req?.headers?.["x-real-ip"] || "unknown"
         const rateLimitResult = rateLimit(`auth:${clientIP}`, 5, 15 * 60 * 1000)
 
-        if (!rateLimitResult.success) {
-          console.log("Rate limit exceeded for IP:", clientIP)
-          return null
-        }
+        if (!rateLimitResult.success) return null
 
         // Sanitize input
         const username = sanitizeInput(credentials.username)
         const password = credentials.password
-
-        console.log("Attempting login for:", username)
 
         try {
           // Find user by username or email
@@ -41,22 +35,9 @@ export const authOptions: NextAuthOptions = {
             },
           })
 
-          if (!user) {
-            console.log("User not found:", username)
-            return null
-          }
-
-          console.log("User found:", user.email, "Role:", user.role)
-
-          // Verify password
-          const isValidPassword = await bcrypt.compare(password, user.password)
-
-          if (!isValidPassword) {
-            console.log("Invalid password for user:", username)
-            return null
-          }
-
-          console.log("Password valid, login successful")
+          // Always perform a password comparison to reduce account-enumeration timing differences.
+          const isValidPassword = await bcrypt.compare(password, user?.password ?? DUMMY_PASSWORD_HASH)
+          if (!user || !isValidPassword) return null
 
           return {
             id: user.id,
@@ -95,7 +76,6 @@ export const authOptions: NextAuthOptions = {
           })
 
           if (!dbUser || dbUser.tokenVersion !== token.tokenVersion) {
-            console.log("Token version mismatch, invalidating session")
             return null as never // NextAuth treats this as an invalidated session at runtime.
           }
         } catch (error) {

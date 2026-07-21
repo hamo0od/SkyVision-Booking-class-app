@@ -55,6 +55,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `inline; filename="${fileName}"`,
+        "Cache-Control": "private, no-store",
       },
     })
   } catch (error) {

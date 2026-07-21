@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import bcrypt from "bcryptjs"
+import { rateLimit, validatePassword } from "@/lib/security"
 
 export async function changePassword(formData: FormData) {
   try {
@@ -11,6 +12,10 @@ export async function changePassword(formData: FormData) {
 
     if (!session?.user?.email) {
       return { success: false, message: "Not authenticated" }
+    }
+
+    if (!rateLimit(`change-password:${session.user.email}`, 5, 15 * 60 * 1000).success) {
+      return { success: false, message: "Too many attempts. Please try again later." }
     }
 
     const currentPassword = formData.get("currentPassword") as string
@@ -26,8 +31,8 @@ export async function changePassword(formData: FormData) {
       return { success: false, message: "New passwords do not match" }
     }
 
-    if (newPassword.length < 6) {
-      return { success: false, message: "Password must be at least 6 characters long" }
+    if (!validatePassword(newPassword)) {
+      return { success: false, message: "Password must be 12-128 characters long" }
     }
 
     // Get user from database
@@ -51,7 +56,7 @@ export async function changePassword(formData: FormData) {
     // Update password in database
     await prisma.user.update({
       where: { id: user.id },
-      data: { password: hashedNewPassword },
+      data: { password: hashedNewPassword, tokenVersion: { increment: 1 } },
     })
 
     return { success: true, message: "Password changed successfully" }
