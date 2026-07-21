@@ -21,7 +21,7 @@ interface Booking {
   instructorName: string
   trainingOrder: string
   courseReference: string | null
-  department?: string
+  department: string | null
   ecaaApprovalFile: string | null
   trainingOrderFile: string | null
   bulkBookingId: string | null
@@ -102,7 +102,7 @@ export function AdminBookingList({ bookings, showActions }: AdminBookingListProp
       setTimeout(() => {
         setMessage(null)
       }, 3000)
-    } catch (error) {
+    } catch {
       setMessage({
         type: "error",
         text: "Failed to update booking status.",
@@ -116,7 +116,7 @@ export function AdminBookingList({ bookings, showActions }: AdminBookingListProp
       setIsDeleting(bookingId)
       try {
         await deleteBooking(bookingId)
-      } catch (error) {
+      } catch {
         alert("Failed to delete booking")
         setIsDeleting(null)
       }

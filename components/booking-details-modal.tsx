@@ -34,7 +34,7 @@ interface Booking {
   instructorName: string
   trainingOrder: string
   courseReference: string | null
-  department?: string
+  department: string | null
   ecaaApprovalFile: string | null
   trainingOrderFile: string | null
   bulkBookingId: string | null

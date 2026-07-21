@@ -93,7 +93,6 @@ export function ModernDateTimePicker({
           // If selecting today, ensure time is not in the past
           const now = new Date()
           const currentHour = now.getHours()
-          const currentMinute = now.getMinutes()
 
           // Set to next hour if current time has passed
           newDate.setHours(currentHour + 1, 0, 0, 0)
@@ -131,28 +130,6 @@ export function ModernDateTimePicker({
     return format(date, "PPP") // e.g., "Jan 1, 2024"
   }
 
-  // Custom day renderer to highlight past dates in red
-  const dayRenderer = (day: Date) => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const dayToCheck = new Date(day)
-    dayToCheck.setHours(0, 0, 0, 0)
-
-    const isPast = dayToCheck < today
-    const isSelected = isBulkBooking ? selectedDates.includes(format(day, "yyyy-MM-dd")) : false
-
-    return (
-      <div
-        className={`
-        w-full h-full flex items-center justify-center
-        ${isPast ? "text-red-500 bg-red-50" : ""}
-        ${isSelected ? "bg-blue-100 text-blue-900 font-semibold" : ""}
-      `}
-      >
-        {day.getDate()}
-      </div>
-    )
-  }
 
   // Get minimum time for today
   const getMinTime = () => {

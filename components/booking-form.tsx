@@ -339,7 +339,7 @@ export function BookingForm({ classrooms }: BookingFormProps) {
                       </Button>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {selectedDates.map((dateStr, index) => (
+                      {selectedDates.map((dateStr) => (
                         <div
                           key={dateStr}
                           className="flex items-center justify-between bg-white p-2 rounded border border-green-300"

@@ -110,7 +110,7 @@ export function BulkDatePicker({ selectedDates, onSelectedDatesChange }: BulkDat
 
           <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {selectedDates.map((dateStr, index) => (
+              {selectedDates.map((dateStr) => (
                 <div
                   key={dateStr}
                   className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-blue-300 shadow-sm hover:shadow-md transition-shadow"

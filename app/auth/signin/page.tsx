@@ -35,7 +35,7 @@ export default function SignIn() {
       } else {
         setError("Invalid username or password")
       }
-    } catch (error) {
+    } catch {
       setError("Sign in failed. Please try again.")
     } finally {
       setIsLoading(false)

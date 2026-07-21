@@ -5,7 +5,7 @@ const prisma = new PrismaClient()
 
 async function main() {
   // Create classrooms
-  const classroom1 = await prisma.classroom.upsert({
+  await prisma.classroom.upsert({
     where: { name: "Room A" },
     update: {},
     create: {
@@ -15,7 +15,7 @@ async function main() {
     },
   })
 
-  const classroom2 = await prisma.classroom.upsert({
+  await prisma.classroom.upsert({
     where: { name: "Room B" },
     update: {},
     create: {
