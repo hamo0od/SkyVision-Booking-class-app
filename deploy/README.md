@@ -1,6 +1,6 @@
 # Ubuntu and Nginx deployment
 
-These files target Ubuntu 24.04, Node.js 20 LTS or newer, PostgreSQL, systemd, Nginx, and Certbot. Replace `booking.example.com` everywhere with the real DNS name before enabling the site.
+These files target Ubuntu 24.04, Node.js 20 LTS or newer, PostgreSQL, systemd, Nginx, and Certbot for `classroom.skyvisionairline.net`.
 
 ## 1. Install host dependencies
 
@@ -59,7 +59,7 @@ sudo cp deploy/nginx/skyvision-http.conf /etc/nginx/sites-available/skyvision
 sudo ln -s /etc/nginx/sites-available/skyvision /etc/nginx/sites-enabled/skyvision
 sudo nginx -t
 sudo systemctl reload nginx
-sudo certbot certonly --nginx -d booking.example.com
+sudo certbot certonly --nginx -d classroom.skyvisionairline.net
 sudo cp deploy/nginx/skyvision.conf /etc/nginx/sites-available/skyvision
 sudo nginx -t
 sudo systemctl reload nginx
