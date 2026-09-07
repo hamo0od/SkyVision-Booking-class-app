@@ -1,27 +1,27 @@
 "use server"
 
-import { prisma } from "@/lib/db"
-import type { Prisma } from "@prisma/client"
-import bcrypt from "bcryptjs"
-import { revalidatePath } from "next/cache"
-import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { prisma } from "@/lib/db"
+import { rateLimit } from "@/lib/security"
 import {
-  sanitizeInput,
-  validateEmail,
-  validateUsername,
-  validateName,
-  validatePassword,
-  rateLimit,
-} from "@/lib/security"
+  createManagedUser,
+  deleteManagedUser,
+  updateManagedUser,
+  UserManagementError,
+} from "@/lib/user-management"
+import { getServerSession } from "next-auth"
+import { revalidatePath } from "next/cache"
 import { headers } from "next/headers"
+
+export type UserActionResult = {
+  success: boolean
+  message: string
+  passwordChanged?: boolean
+}
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions)
-
-  if (!session?.user?.email) {
-    throw new Error("Unauthorized")
-  }
+  if (!session?.user?.email) throw new UserManagementError("Unauthorized")
 
   const adminUser = await prisma.user.findUnique({
     where: { email: session.user.email },
@@ -29,261 +29,71 @@ async function requireAdmin() {
   })
 
   if (!adminUser || adminUser.role !== "ADMIN") {
-    throw new Error("Unauthorized - Admin access required")
+    throw new UserManagementError("Unauthorized - Admin access required")
   }
 
   return adminUser
 }
 
-export async function createUser(formData: FormData) {
-  await requireAdmin()
-
-  // Get client IP for rate limiting
+async function checkRateLimit(action: string, adminId: string, limit: number) {
   const headersList = await headers()
   const forwarded = headersList.get("x-forwarded-for")
-  const clientIP = forwarded ? forwarded.split(",")[0].trim() : "unknown"
+  const realIP = headersList.get("x-real-ip")
+  const clientIP = forwarded?.split(",")[0].trim() || realIP || "unknown"
 
-  // Rate limiting
-  const rateLimitResult = rateLimit(`create_user:${clientIP}`, 3, 60 * 1000) // 3 attempts per minute
-  if (!rateLimitResult.success) {
-    throw new Error("Too many requests. Please try again later.")
+  if (!rateLimit(`${action}:${adminId}:${clientIP}`, limit, 60 * 1000).success) {
+    throw new UserManagementError("Too many requests. Please try again later.")
   }
+}
 
-  // Sanitize and validate inputs
-  const email = sanitizeInput(formData.get("email") as string)
-  const username = sanitizeInput(formData.get("username") as string)
-  const name = sanitizeInput(formData.get("name") as string)
-  const password = formData.get("password") as string
-  const role = sanitizeInput(formData.get("role") as string)
+function failureResult(error: unknown, fallback: string): UserActionResult {
+  if (error instanceof UserManagementError) return { success: false, message: error.message }
+  return { success: false, message: fallback }
+}
 
-  // Validation
-  if (!email || !username || !name || !password || !role) {
-    throw new Error("All fields are required")
-  }
-
-  if (!validateEmail(email)) {
-    throw new Error("Invalid email format")
-  }
-
-  if (!validateUsername(username)) {
-    throw new Error("Username must be 3-20 characters and contain only letters, numbers, and underscores")
-  }
-
-  if (!validateName(name)) {
-    throw new Error("Name must be 2-50 characters and contain only letters, numbers, spaces, hyphens, and apostrophes")
-  }
-
-  if (!validatePassword(password)) {
-    throw new Error("Password must be 12-128 characters long")
-  }
-
-  if (!["USER", "ADMIN"].includes(role)) {
-    throw new Error("Invalid role")
-  }
-
+export async function createUser(formData: FormData): Promise<UserActionResult> {
   try {
-    // Check if email or username already exists
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [{ email }, { username }],
-      },
-    })
-
-    if (existingUser) {
-      if (existingUser.email === email) {
-        throw new Error("Email already exists")
-      }
-      if (existingUser.username === username) {
-        throw new Error("Username already exists")
-      }
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 12)
-
-    // Create user
-    await prisma.user.create({
-      data: {
-        email,
-        username,
-        name,
-        password: hashedPassword,
-        role: role as "USER" | "ADMIN",
-        tokenVersion: 0,
-      },
-    })
-
+    const admin = await requireAdmin()
+    await checkRateLimit("create_user", admin.id, 3)
+    await createManagedUser(prisma, formData)
     revalidatePath("/admin/users")
     return { success: true, message: "User created successfully" }
   } catch (error) {
-    console.error("Database error:", error)
-    if (error instanceof Error) {
-      throw error
-    }
-    throw new Error("Failed to create user. Please try again.")
+    console.error("Create user error:", error)
+    return failureResult(error, "Failed to create user. Please try again.")
   }
 }
 
-export async function updateUser(userId: string, formData: FormData) {
-  await requireAdmin()
-
-  // Get client IP for rate limiting
-  const headersList = await headers()
-  const forwarded = headersList.get("x-forwarded-for")
-  const clientIP = forwarded ? forwarded.split(",")[0].trim() : "unknown"
-
-  // Rate limiting
-  const rateLimitResult = rateLimit(`update_user:${clientIP}`, 10, 60 * 1000) // 10 attempts per minute
-  if (!rateLimitResult.success) {
-    throw new Error("Too many requests. Please try again later.")
-  }
-
+export async function updateUser(userId: string, formData: FormData): Promise<UserActionResult> {
   try {
-    // Get current user data
-    const currentUser = await prisma.user.findUnique({
-      where: { id: userId },
-    })
-
-    if (!currentUser) {
-      throw new Error("User not found")
-    }
-
-    // Sanitize inputs
-    const email = sanitizeInput(formData.get("email") as string) || currentUser.email
-    const username = sanitizeInput(formData.get("username") as string) || currentUser.username
-    const name = sanitizeInput(formData.get("name") as string) || currentUser.name || ""
-    const role = sanitizeInput(formData.get("role") as string) || currentUser.role
-    const password = formData.get("password") as string
-
-    // Validate inputs
-    if (!validateEmail(email)) {
-      throw new Error("Invalid email format")
-    }
-
-    if (!validateUsername(username)) {
-      throw new Error("Username must be 3-20 characters and contain only letters, numbers, and underscores")
-    }
-
-    if (!validateName(name)) {
-      throw new Error(
-        "Name must be 2-50 characters and contain only letters, numbers, spaces, hyphens, and apostrophes",
-      )
-    }
-
-    if (!["USER", "ADMIN"].includes(role)) {
-      throw new Error("Invalid role")
-    }
-
-    // Check if email or username is already taken by another user
-    if (email !== currentUser.email || username !== currentUser.username) {
-      const existingUser = await prisma.user.findFirst({
-        where: {
-          AND: [
-            { id: { not: userId } },
-            {
-              OR: [{ email }, { username }],
-            },
-          ],
-        },
-      })
-
-      if (existingUser) {
-        if (existingUser.email === email) {
-          throw new Error("Email already exists")
-        }
-        if (existingUser.username === username) {
-          throw new Error("Username already exists")
-        }
-      }
-    }
-
-    // Prepare update data
-    const updateData: Prisma.UserUpdateInput = {
-      email,
-      username,
-      name,
-      role: role as "USER" | "ADMIN",
-    }
-
-    // Handle password update
-    let passwordChanged = false
-    if (password && password.trim() !== "") {
-      if (!validatePassword(password)) {
-        throw new Error("Password must be 12-128 characters long")
-      }
-
-      updateData.password = await bcrypt.hash(password, 12)
-      updateData.tokenVersion = currentUser.tokenVersion + 1 // Invalidate existing sessions
-      passwordChanged = true
-    }
-
-    // Update user
-    await prisma.user.update({
-      where: { id: userId },
-      data: updateData,
-    })
-
+    const admin = await requireAdmin()
+    await checkRateLimit("update_user", admin.id, 10)
+    const { passwordChanged } = await updateManagedUser(prisma, admin.id, userId, formData)
     revalidatePath("/admin/users")
 
-    const message = passwordChanged
-      ? "User updated successfully. User has been logged out due to password change."
-      : "User updated successfully"
-
-    return { success: true, message }
-  } catch (error) {
-    console.error("Database error:", error)
-    if (error instanceof Error) {
-      throw error
+    return {
+      success: true,
+      passwordChanged,
+      message: passwordChanged
+        ? "User updated successfully. User has been logged out due to password change."
+        : "User updated successfully",
     }
-    throw new Error("Failed to update user. Please try again.")
+  } catch (error) {
+    console.error("Update user error:", error)
+    return failureResult(error, "Failed to update user. Please try again.")
   }
 }
 
-export async function deleteUser(userId: string) {
-  const currentAdmin = await requireAdmin()
-
-  // Get client IP for rate limiting
-  const headersList = await headers()
-  const forwarded = headersList.get("x-forwarded-for")
-  const clientIP = forwarded ? forwarded.split(",")[0].trim() : "unknown"
-
-  // Rate limiting
-  const rateLimitResult = rateLimit(`delete_user:${clientIP}`, 5, 60 * 1000) // 5 attempts per minute
-  if (!rateLimitResult.success) {
-    throw new Error("Too many requests. Please try again later.")
-  }
-
+export async function deleteUser(userId: string): Promise<UserActionResult> {
   try {
-    // Check if user exists
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-    })
-
-    if (!user) {
-      throw new Error("User not found")
-    }
-
-    if (user.id === currentAdmin.id) {
-      throw new Error("You cannot delete your own administrator account")
-    }
-
-    if (user.role === "ADMIN" && (await prisma.user.count({ where: { role: "ADMIN" } })) <= 1) {
-      throw new Error("The last administrator account cannot be deleted")
-    }
-
-    // Delete user and their bookings through the database cascade.
-    await prisma.user.delete({
-      where: { id: userId },
-    })
-
+    const admin = await requireAdmin()
+    await checkRateLimit("delete_user", admin.id, 5)
+    await deleteManagedUser(prisma, admin.id, userId)
     revalidatePath("/admin/users")
     return { success: true, message: "User deleted successfully" }
   } catch (error) {
-    console.error("Database error:", error)
-    if (error instanceof Error) {
-      throw error
-    }
-    throw new Error("Failed to delete user. Please try again.")
+    console.error("Delete user error:", error)
+    return failureResult(error, "Failed to delete user. Please try again.")
   }
 }
 
@@ -291,7 +101,7 @@ export async function getUsers() {
   await requireAdmin()
 
   try {
-    const users = await prisma.user.findMany({
+    return await prisma.user.findMany({
       select: {
         id: true,
         email: true,
@@ -299,20 +109,12 @@ export async function getUsers() {
         name: true,
         role: true,
         createdAt: true,
-        _count: {
-          select: {
-            bookings: true,
-          },
-        },
+        _count: { select: { bookings: true } },
       },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: { createdAt: "desc" },
     })
-
-    return users
   } catch (error) {
-    console.error("Database error:", error)
+    console.error("Fetch users error:", error)
     throw new Error("Failed to fetch users")
   }
 }

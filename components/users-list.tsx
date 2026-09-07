@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { updateUser, deleteUser } from "@/app/actions/users"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -28,14 +29,17 @@ interface UsersListProps {
 }
 
 export function UsersList({ users, currentUserId }: UsersListProps) {
+  const router = useRouter()
   const [editingUser, setEditingUser] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [deletingUser, setDeletingUser] = useState<string | null>(null)
   const { toast } = useToast()
-  const [editForm, setEditForm] = useState({ name: "", role: "", username: "", password: "" })
+  const [editForm, setEditForm] = useState({ email: "", name: "", role: "", username: "", password: "" })
 
   const handleEdit = (user: UserType) => {
     setEditingUser(user.id)
     setEditForm({
+      email: user.email,
       name: user.name || "",
       role: user.role,
       username: user.username,
@@ -47,6 +51,7 @@ export function UsersList({ users, currentUserId }: UsersListProps) {
     try {
       setIsSaving(true)
       const formData = new FormData()
+      formData.append("email", editForm.email)
       formData.append("name", editForm.name)
       formData.append("role", editForm.role)
       formData.append("username", editForm.username)
@@ -54,12 +59,11 @@ export function UsersList({ users, currentUserId }: UsersListProps) {
         formData.append("password", editForm.password)
       }
 
-      const res = (await updateUser(userId, formData)) as {
-        success: boolean
-        message: string
-        passwordChanged?: boolean
-      }
+      const res = await updateUser(userId, formData)
+      if (!res.success) throw new Error(res.message)
+
       setEditingUser(null)
+      router.refresh()
 
       toast({
         title: res?.passwordChanged ? "Password changed successfully" : "User updated",
@@ -80,14 +84,20 @@ export function UsersList({ users, currentUserId }: UsersListProps) {
   const handleDelete = async (userId: string, userName: string) => {
     if (confirm(`Are you sure you want to delete ${userName}? This will also delete all their bookings.`)) {
       try {
-        await deleteUser(userId)
+        setDeletingUser(userId)
+        const result = await deleteUser(userId)
+        if (!result.success) throw new Error(result.message)
+
         toast({ title: "User deleted", description: `${userName} and their bookings were removed.` })
+        router.refresh()
       } catch (error) {
         toast({
           title: "Deletion failed",
           description: error instanceof Error ? error.message : "Failed to delete user",
           variant: "destructive",
         })
+      } finally {
+        setDeletingUser(null)
       }
     }
   }
@@ -162,10 +172,25 @@ export function UsersList({ users, currentUserId }: UsersListProps) {
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Mail className="h-4 w-4" />
-              <span>{user.email}</span>
-            </div>
+            {editingUser === user.id ? (
+              <div>
+                <label htmlFor={"email-" + user.id} className="block text-sm font-medium text-gray-700">
+                  Email
+                </label>
+                <Input
+                  id={"email-" + user.id}
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  className="mt-1"
+                />
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <Mail className="h-4 w-4" />
+                <span>{user.email}</span>
+              </div>
+            )}
 
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <Calendar className="h-4 w-4" />
@@ -251,9 +276,10 @@ export function UsersList({ users, currentUserId }: UsersListProps) {
                       variant="destructive"
                       onClick={() => handleDelete(user.id, user.name || user.email)}
                       className="flex-1"
+                      disabled={deletingUser === user.id}
                     >
                       <Trash2 className="h-4 w-4 mr-1" />
-                      Delete
+                      {deletingUser === user.id ? "Deleting..." : "Delete"}
                     </Button>
                   </>
                 )}

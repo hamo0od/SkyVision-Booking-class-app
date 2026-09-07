@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { createUser } from "@/app/actions/users"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,6 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { UserPlus, CheckCircle, AlertCircle, Mail, User, Shield, Lock, Eye, EyeOff } from "lucide-react"
 
 export function CreateUserForm() {
+  const router = useRouter()
+  const formRef = useRef<HTMLFormElement>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedRole, setSelectedRole] = useState("") // force explicit choice
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
@@ -20,13 +23,18 @@ export function CreateUserForm() {
 
     try {
       const result = await createUser(formData)
+      if (!result.success) {
+        setMessage({ type: "error", text: result.message })
+        return
+      }
+
       setMessage({ type: "success", text: result.message })
 
       // Reset form
       setSelectedRole("")
       setShowPassword(false)
-      const form = document.querySelector("form") as HTMLFormElement
-      form?.reset()
+      formRef.current?.reset()
+      router.refresh()
     } catch (error) {
       setMessage({
         type: "error",
@@ -59,7 +67,7 @@ export function CreateUserForm() {
           </div>
         )}
 
-        <form action={handleSubmit} className="space-y-4">
+        <form ref={formRef} action={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-700">
               <Mail className="inline h-4 w-4 mr-1" />
@@ -93,7 +101,7 @@ export function CreateUserForm() {
               <Input
                 type={showPassword ? "text" : "password"}
                 name="password"
-                placeholder="••••••••"
+                placeholder="At least 12 characters"
                 required
                 className="w-full pr-10"
               />
@@ -118,7 +126,7 @@ export function CreateUserForm() {
               <Shield className="inline h-4 w-4 mr-1" />
               Role
             </label>
-            <Select name="role" value={selectedRole} onValueChange={setSelectedRole}>
+            <Select value={selectedRole} onValueChange={setSelectedRole}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select user role" />
               </SelectTrigger>
@@ -137,24 +145,13 @@ export function CreateUserForm() {
                 </SelectItem>
               </SelectContent>
             </Select>
-            {/* Visually hidden, required field that participates in native validation */}
-            <input
-              type="text"
-              name="role"
-              value={selectedRole}
-              required
-              pattern=".+"
-              aria-hidden="true"
-              tabIndex={-1}
-              onChange={() => {}}
-              className="sr-only absolute -m-px h-0 w-0 overflow-hidden p-0 opacity-0 pointer-events-none"
-            />
+            <input type="hidden" name="role" value={selectedRole} />
           </div>
 
           <Button
             type="submit"
             className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-medium py-3 rounded-lg transition-all duration-200"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !selectedRole}
           >
             {isSubmitting ? (
               <div className="flex items-center gap-2">
