@@ -20,8 +20,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const resolvedParams = await params
     const filePath = resolvedParams.path.join("/")
+    if (resolvedParams.path[0] !== "uploads") {
+      return new NextResponse("Forbidden", { status: 403 })
+    }
+
     const uploadsRoot = resolve(process.cwd(), "uploads")
-    const fullPath = resolve(process.cwd(), ...resolvedParams.path)
+    const fullPath = resolve(process.cwd(), "uploads", ...resolvedParams.path.slice(1))
 
     // Security check: ensure the resolved file stays in the uploads directory.
     if (!isInsideDirectory(uploadsRoot, fullPath)) {

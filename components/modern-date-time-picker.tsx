@@ -211,7 +211,7 @@ export function ModernDateTimePicker({
                     backgroundColor: "#fef2f2",
                   },
                 }}
-                initialFocus
+                autoFocus
               />
               <div className="p-3 border-t">
                 <div className="text-xs text-gray-500 mb-2 flex items-center gap-2">
@@ -295,7 +295,7 @@ export function ModernDateTimePicker({
                   backgroundColor: "#fef2f2",
                 },
               }}
-              initialFocus
+              autoFocus
             />
             <div className="p-3 border-t">
               <div className="text-xs text-gray-500 flex items-center gap-2">

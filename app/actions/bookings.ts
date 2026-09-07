@@ -6,7 +6,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { writeFile, mkdir, unlink } from "fs/promises"
-import { join } from "path"
+import { isAbsolute, join, relative, resolve } from "path"
 import { randomUUID } from "crypto"
 import { sanitizeInput } from "@/lib/security"
 import {
@@ -264,7 +264,18 @@ async function validatePdfUpload(
 // Helper function to delete files
 async function deleteFile(filePath: string) {
   try {
-    const fullPath = join(process.cwd(), filePath)
+    const pathParts = filePath.replace(/\\/g, "/").split("/").filter(Boolean)
+    if (pathParts.shift() !== "uploads") {
+      throw new Error("Refusing to delete a file outside the uploads directory")
+    }
+
+    const uploadsRoot = resolve(process.cwd(), "uploads")
+    const fullPath = resolve(process.cwd(), "uploads", ...pathParts)
+    const relativePath = relative(uploadsRoot, fullPath)
+    if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
+      throw new Error("Refusing to delete a file outside the uploads directory")
+    }
+
     await unlink(fullPath)
     console.log(`Deleted file: ${filePath}`)
   } catch (error) {

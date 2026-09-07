@@ -144,7 +144,7 @@ export function SimpleDateTimePicker({
                 backgroundColor: "#fef2f2",
               },
             }}
-            initialFocus
+            autoFocus
           />
           <div className="p-3 border-t">
             <div className="text-xs text-gray-500 flex items-center gap-2">
@@ -186,7 +186,7 @@ export function SimpleDateTimePicker({
                 backgroundColor: "#fef2f2",
               },
             }}
-            initialFocus
+            autoFocus
           />
         </PopoverContent>
       </Popover>
